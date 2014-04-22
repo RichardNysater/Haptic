@@ -9,23 +9,20 @@ as published by the Free Software Foundation.
 */
 //===========================================================================
 
-//---------------------------------------------------------------------------
 #include <assert.h>
 #include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//---------------------------------------------------------------------------
 #include "chai3d.h"
 #include "E:\Downloads\chai3d-2.0.0\examples\msvc9\01-devices\src\Constants.h"
-//---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 // DECLARED CONSTANTS
 //---------------------------------------------------------------------------
 
 // initial size (width/height) in pixels of the display window
-const int WINDOW_SIZE_W = 600, WINDOW_SIZE_H = 600;
+const int WINDOW_SIZE_W = 1680, WINDOW_SIZE_H = 1050;
 
 // mouse menu options (right button)
 const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2;
@@ -38,7 +35,7 @@ const double MESH_SCALE_SIZE = 2.0;
 //---------------------------------------------------------------------------
 FORCE_DIRECTION direction = NONE;
 Forces forces;
-bool world_transparent = false, forces_transparent = true;
+bool worldTransparent = false, forcesTransparent = true;
 
 // -1 if inverted
 int invertation = 1;
@@ -49,7 +46,7 @@ cWorld* world;
 cCamera* camera;
 
 // a mesh object used to create the height map
-cMesh* object;
+cMesh* solidWorld;
 
 // a small magnetic line used to constrain the tool alon the vertical axis
 cShapeLine* magneticLine;
@@ -76,7 +73,7 @@ cGeneric3dofPointer* tool;
 double proxyRadius;
 
 // status of the main simulation haptics loop
-bool simulationRunning = false;
+bool programRunning = false;
 
 // update camera settings
 void updateCameraPosition();
@@ -95,7 +92,7 @@ int mouseX, mouseY, mouseButton;
 string resourceRoot;
 
 // has exited haptics simulation thread
-bool simulationFinished = false;
+bool programFinished = false;
 
 //---------------------------------------------------------------------------
 // DECLARED MACROS
@@ -231,23 +228,24 @@ int main(int argc, char* argv[])
 	// COMPOSE THE VIRTUAL SCENE
 	//-----------------------------------------------------------------------
 
-	// create a new mesh to display a height map
-	object = new cMesh(world);
-	for (int i = 0; i < forces.size();++i)
+	// create new meshes for the solid world and the forces
+	solidWorld = new cMesh(world);
+	world->addChild(solidWorld);
+	for (unsigned int i = 0; i < forces.size();++i)
 	{
-		forces.force_v[i] = new cMesh(world);
+		forces[i] = new cMesh(world);
 		world->addChild(forces[i]);
 	}
-	world->addChild(object);
 
-	// load default map
-	loadHeightMap(object,0,0,255);
-	loadHeightMap(forces[UP], 255, 0, 0);
-	loadHeightMap(forces[DOWN], 0, 255, 0);
-	loadHeightMap(forces[LEFT], 255, 255, 0);
-	loadHeightMap(forces[RIGHT], 255, 0, 255);
-	object->setTransparencyLevel(100, true, true);
-	object->setUseTexture(false);
+	// load maps
+	loadHeightMap(solidWorld,0,0,255); // Solid world is blue
+	loadHeightMap(forces[UP], 255, 0, 0); // Up is red
+	loadHeightMap(forces[DOWN], 0, 255, 0); // Down is green
+	loadHeightMap(forces[LEFT], 255, 255, 0); // Left is yellow
+	loadHeightMap(forces[RIGHT], 255, 0, 255); // Right is pink
+	solidWorld->setTransparencyLevel(100, true, true); //Solid world should be opaque
+	solidWorld->setUseTexture(false);
+
 	// read the scale factor between the physical workspace of the haptic
 	// device and the virtual workspace defined for the tool
 	double workspaceScaleFactor = tool->getWorkspaceScaleFactor();
@@ -256,7 +254,7 @@ int main(int argc, char* argv[])
 	// haptic device. The value is scaled to take into account the
 	// workspace scale factor
 	double stiffnessMax = info.m_maxForceStiffness / workspaceScaleFactor;
-	object->setStiffness(0.5 * stiffnessMax, true);
+	solidWorld->setStiffness(0.5 * stiffnessMax, true);
 
 	//-----------------------------------------------------------------------
 	// OPEN GL - WINDOW DISPLAY
@@ -282,15 +280,13 @@ int main(int argc, char* argv[])
 	glutMotionFunc(mouseMove);
 	glutKeyboardFunc(keySelect);
 	glutReshapeFunc(resizeWindow);
-	glutSetWindowTitle("CHAI 3D");
+	glutSetWindowTitle("IDCL - Haptics project");
 
 
 	//-----------------------------------------------------------------------
 	// START SIMULATION
 	//-----------------------------------------------------------------------
-
-	// simulation in now running
-	simulationRunning = true;
+	programRunning = true;
 
 	// create a thread which starts the main haptics rendering loop
 	cThread* hapticsThread = new cThread();
@@ -299,19 +295,15 @@ int main(int argc, char* argv[])
 	// start the main graphics rendering loop
 	glutMainLoop();
 
-	// close everything
 	close();
-
-	// exit
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 /*
-	Resize the program window.
+	Update the size of the viewport
 */
 void resizeWindow(int w, int h)
 {
-	// update the size of the viewport
 	displayW = w;
 	displayH = h;
 	glViewport(0, 0, displayW, displayH);
@@ -323,24 +315,20 @@ void resizeWindow(int w, int h)
 */
 void keySelect(unsigned char key, int x, int y)
 {
-	// escape key
-	if ((key == 27) || (key == 'x'))
+	if ((key == 27) || (key == 'x')) // Escape key
 	{
-		// close everything
 		close();
-
-		// exit application
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 	else if (key == '1')
 	{
-		bool useTexture = object->getUseTexture();
-		object->setUseTexture(!useTexture);
+		bool useTexture = solidWorld->getUseTexture();
+		solidWorld->setUseTexture(!useTexture);
 	}
 	else if (key == '2')
 	{
-		bool useWireMode = object->getWireMode();
-		object->setWireMode(!useWireMode);
+		bool useWireMode = solidWorld->getWireMode();
+		solidWorld->setWireMode(!useWireMode);
 	}
 	else if (key == '3')
 	{
@@ -348,30 +336,28 @@ void keySelect(unsigned char key, int x, int y)
 	}
 	else if (key == '4')
 	{
-		invertation = -1 * invertation;
+		invertation *= -1;
 	}
 	else if (key == '5')
 	{
-		if (world_transparent)
+		if (worldTransparent)
 		{
-			object->setTransparencyLevel(0, true, true);
-			world_transparent = false;
+			solidWorld->setTransparencyLevel(0, true, true);
 		}
 		else
 		{
-			object->setTransparencyLevel(100, true, true);
-			world_transparent = true;
+			solidWorld->setTransparencyLevel(100, true, true);
 		}
+		worldTransparent = !worldTransparent;
 	}
 	else if (key == '6')
 	{
-		if (forces_transparent)
+		if (forcesTransparent)
 		{
 			for (auto i : forces)
 			{
 				i->setTransparencyLevel(0, true, true);
 			}
-			forces_transparent = false;
 		}
 		else
 		{
@@ -379,11 +365,9 @@ void keySelect(unsigned char key, int x, int y)
 			{
 				i->setTransparencyLevel(100, true, true);
 			}			
-			forces_transparent = true;
 		}
+		forcesTransparent = !forcesTransparent;
 	}
-
-	
 }
 
 /*
@@ -391,17 +375,14 @@ void keySelect(unsigned char key, int x, int y)
 */
 void mouseClick(int button, int state, int x, int y)
 {
-	// mouse button down
-	if (state == GLUT_DOWN)
+	if (state == GLUT_DOWN) // mouse button down
 	{
 		flagCameraInMotion = true;
 		mouseX = x;
 		mouseY = y;
 		mouseButton = button;
 	}
-
-	// mouse button up
-	else if (state == GLUT_UP)
+	else if (state == GLUT_UP) // mouse button up
 	{
 		flagCameraInMotion = false;
 	}
@@ -425,7 +406,6 @@ void mouseMove(int x, int y)
 			cameraAngleV = cameraAngleV + (y - mouseY);
 		}
 	}
-
 	updateCameraPosition();
 
 	mouseX = x;
@@ -437,10 +417,13 @@ void mouseMove(int x, int y)
 */
 void close(void)
 {
-	simulationRunning = false;
+	programRunning = false;
 
 	// wait for graphics and haptics loops to terminate
-	while (!simulationFinished) { cSleepMs(100); }
+	while (!programFinished)
+	{
+		cSleepMs(100);
+	}
 	tool->stop();
 }
 
@@ -449,8 +432,8 @@ void close(void)
 */
 void updateGraphics(void)
 {
-	// update object normals
-	object->computeAllNormals(true);
+	// update solidWorld normals
+	solidWorld->computeAllNormals(true);
 	for (auto i : forces)
 	{
 		i->computeAllNormals(true);
@@ -465,12 +448,11 @@ void updateGraphics(void)
 	err = glGetError();
 	if (err != GL_NO_ERROR) printf("Error:  %s\n", gluErrorString(err));
 
-	if (simulationRunning)
+	if (programRunning)
 	{
 		glutPostRedisplay();
 	}
 }
-
 
 /*
 	Updates the haptic feedback
@@ -484,19 +466,15 @@ void updateHaptics(void)
 	// Tool positions
 	cVector3d toolGlobalPos, toolLocalPos, prevToolGlobalPos, prevToolLocalPos;
 
-	// main haptic simulation loop
-	while (simulationRunning)
+	while (programRunning)
 	{
 		// compute global reference frames for each object
 		world->computeGlobalPositions(true);
 
-		// update position and orientation of tool
+		// update position, orientation of tool and compute forces
 		tool->updatePose();
-
-		// compute interaction forces
 		tool->computeInteractionForces();
 
-		// read user switch
 		bool userSwitch = tool->getUserSwitch(0);
 
 		// update tool position
@@ -506,7 +484,7 @@ void updateHaptics(void)
 		if ((state == STATE_MOVE_CAMERA) && (!userSwitch)) // Stop moving camera
 		{
 			state = STATE_IDLE;
-			object->setHapticEnabled(true, true);
+			solidWorld->setHapticEnabled(true, true);
 			for (auto i : forces)
 			{
 				i->setHapticEnabled(true, true);
@@ -515,7 +493,7 @@ void updateHaptics(void)
 		else if ((state == STATE_IDLE) && (userSwitch)) // Start moving camera
 		{
 			state = STATE_MOVE_CAMERA;
-			object->setHapticEnabled(false, true);
+			solidWorld->setHapticEnabled(false, true);
 			for (auto i : forces)
 			{
 				i->setHapticEnabled(false, true);
@@ -534,11 +512,11 @@ void updateHaptics(void)
 			updateCameraPosition();
 		}
 
-		for (int i = 0; i < forces.size(); ++i) // Check if we are affected by a new force
+		for (unsigned int i = 0; i < forces.size(); ++i) // Check if we are affected by a new force
 		{
 			if (tool->isInContact(forces[i]))
 			{				
-				for (int j = 0; j < 4; ++j)
+				for (unsigned int j = 0; j < forces.size(); ++j)
 				{
 					if (j != i)
 						forces[j]->setHapticEnabled(true);
@@ -591,8 +569,7 @@ void updateHaptics(void)
 		}
 		tool->applyForces();
 	}
-
-	simulationFinished = true;
+	programFinished = true;
 }
 
 /*
@@ -607,18 +584,17 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	cTexture2D* newTexture = new cTexture2D();
 	world->addTexture(newTexture);
 
-	bool fileload = newTexture->loadFromFile(RESOURCE_PATH("resources/images/map.bmp"));
-	if (!fileload)
-	{
-#if defined(_MSVC)
-		fileload = newTexture->loadFromFile("../../../bin/resources/images/map.bmp");
-#endif
-	}
+	#if defined(_MSVC)
+		bool fileload = newTexture->loadFromFile("../../../bin/resources/images/map.bmp");
+	#else
+		bool fileload = newTexture->loadFromFile(RESOURCE_PATH("resources/images/map.bmp"));
+	#endif
+
 	if (!fileload)
 	{
 		printf("Error - Texture image failed to load correctly.\n");
 		close();
-		return (-1);
+		return EXIT_FAILURE;
 	}
 
 	int texSizeU = newTexture->m_image.getWidth();
@@ -643,11 +619,11 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	double offsetV = 0.5 * (double) texSizeV * size;
 
 	// For each pixel of the image, create a vertex
-	for (int v = 0; v<texSizeV; v++)
+	for (int v = 0; v < texSizeV; v++)
 	{
-		for (int u = 0; u<texSizeU; u++)
+		for (int u = 0; u < texSizeU; u++)
 		{
-			double px, py, tu, tv;
+			double px, py;
 
 			cColorb color = newTexture->m_image.getPixelColor(u, v);
 			double height = -1;
@@ -673,9 +649,9 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	}
 
 	// Create a triangle based map using the above pixels
-	for (int v = 0; v<(texSizeV - 1); v++)
+	for (int v = 0; v < (texSizeV - 1); v++)
 	{
-		for (int u = 0; u<(texSizeU - 1); u++)
+		for (int u = 0; u < (texSizeU - 1); u++)
 		{
 			// get the indexing numbers of the next four vertices
 			unsigned int index00 = ((v + 0) * texSizeU) + (u + 0);
@@ -689,14 +665,10 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 		}
 	}
 
-	// apply texture to object
+	// apply texture, compute normals and size
 	obj->setTexture(newTexture);
 	obj->setUseTexture(true);
-
-	// compute normals
 	obj->computeAllNormals(true);
-
-	// compute size of object
 	obj->computeBoundaryBox(true);
 
 	cVector3d min = obj->getBoundaryMin();
@@ -718,18 +690,13 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	// the proxy will work nicely when haptics are enabled.
 	obj->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
 
-	// set size of frame
+	// set size of frame and normals, then render and update
 	obj->setFrameSize(0.2, true);
-
-	// set size of normals
 	obj->setNormalsProperties(0.01, cColorf(1.0, 0.0, 0.0, 1.0), true);
-
-	// render graphically both sides of triangles
 	obj->setUseCulling(false);
-
-	// update global position
 	obj->computeGlobalPositions();
-	obj->setTransparencyLevel(0, true, true); 
+	obj->setTransparencyLevel(0, true, true);  // Set mesh as invisible
+
 	return EXIT_SUCCESS;
 }
 
@@ -738,14 +705,23 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 */
 void updateCameraPosition()
 {
-	// check values
-	if (cameraDistance < 0.1) { cameraDistance = 0.1; }
-	if (cameraAngleV > 89) { cameraAngleV = 89; }
-	if (cameraAngleV < -89) { cameraAngleV = -89; }
+	// Check bounds
+	if (cameraDistance < 0.1)
+	{
+		cameraDistance = 0.1;
+	}
+
+	if (cameraAngleV > 89)
+	{
+		cameraAngleV = 89;
+	}
+	else if (cameraAngleV < -89)
+	{
+		cameraAngleV = -89;
+	}
 
 	// compute position of camera in space
-	cVector3d pos = cAdd(
-		cameraPosition,
+	cVector3d pos = cAdd(cameraPosition,
 		cVector3d(
 		cameraDistance * cCosDeg(cameraAngleH) * cCosDeg(cameraAngleV),
 		cameraDistance * cSinDeg(cameraAngleH) * cCosDeg(cameraAngleV),
@@ -765,9 +741,6 @@ void updateCameraPosition()
 	// recompute global positions
 	world->computeGlobalPositions(true);
 
-	// update tool position
-	if (tool != NULL)
+	if (tool != NULL) // update tool position
 		tool->setPos(-cameraDistance, 0.0, 0.0);
 }
-
-//---------------------------------------------------------------------------
