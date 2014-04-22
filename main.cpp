@@ -1,11 +1,11 @@
 //===========================================================================
 /*
-This file is part of a haptics course project
-and is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License("GPL") version 2
-as published by the Free Software Foundation.
+	This file is part of a haptics course project
+	and is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License("GPL") version 2
+	as published by the Free Software Foundation.
 
-\author    Richard Nysater
+	\author    Richard Nysater
 */
 //===========================================================================
 
@@ -15,7 +15,7 @@ as published by the Free Software Foundation.
 #include <stdlib.h>
 #include <string.h>
 #include "chai3d.h"
-#include "E:\Downloads\chai3d-2.0.0\examples\msvc9\01-devices\src\Constants.h"
+#include "../Constants.h"
 
 //---------------------------------------------------------------------------
 // DECLARED CONSTANTS
@@ -34,11 +34,14 @@ const double MESH_SCALE_SIZE = 2.0;
 // DECLARED VARIABLES
 //---------------------------------------------------------------------------
 FORCE_DIRECTION direction = NONE;
-Forces forces;
+
+Forces forces(4);
+
 bool worldTransparent = false, forcesTransparent = true;
 
 // -1 if inverted
 int invertation = 1;
+
 // a world that contains all objects of the virtual environment
 cWorld* world;
 
@@ -48,17 +51,8 @@ cCamera* camera;
 // a mesh object used to create the height map
 cMesh* solidWorld;
 
-// a small magnetic line used to constrain the tool alon the vertical axis
-cShapeLine* magneticLine;
-
-// two sphere position at the end of the magnetic line
-cShapeSphere* sphereA, *sphereB;
-
 // a light source to illuminate the objects in the virtual scene
 cLight *light;
-
-// a little "chai3d" bitmap logo at the bottom of the screen
-cBitmap* logo;
 
 // width and height of the current window display
 int displayW = 0, displayH = 0;
@@ -80,9 +74,9 @@ void updateCameraPosition();
 
 // camera position and orientation is spherical coordinates
 double cameraAngleH, cameraAngleV, cameraDistance;
+
 cVector3d cameraPosition;
 
-// camera status
 bool flagCameraInMotion;
 
 // mouse position and button status
