@@ -11,12 +11,13 @@ as published by the Free Software Foundation.
 
 //---------------------------------------------------------------------------
 #include <assert.h>
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 //---------------------------------------------------------------------------
 #include "chai3d.h"
+#include "E:\Downloads\chai3d-2.0.0\examples\msvc9\01-devices\src\Constants.h"
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -24,76 +25,13 @@ as published by the Free Software Foundation.
 //---------------------------------------------------------------------------
 
 // initial size (width/height) in pixels of the display window
-const int WINDOW_SIZE_W = 600;
-const int WINDOW_SIZE_H = 600;
+const int WINDOW_SIZE_W = 600, WINDOW_SIZE_H = 600;
 
 // mouse menu options (right button)
-const int OPTION_FULLSCREEN = 1;
-const int OPTION_WINDOWDISPLAY = 2;
+const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2;
 
 // size of map
 const double MESH_SCALE_SIZE = 2.0;
-
-
-enum FORCE_DIRECTION
-{
-	UP,
-	DOWN,
-	LEFT,
-	RIGHT,
-	NONE
-};
-
-/*
-	Handles the forces.
-	Colours: up = red, down = green, left = yellow, right = pink
-*/
-class Forces
-{
-public:
-	Forces()
-	{
-		force_v.resize(4);
-	}
-
-	cMesh *& operator[](const unsigned int element)
-	{
-		return force_v[element];
-	}
-
-	const cMesh *const & operator[](const unsigned int element) const
-	{
-		return force_v[element];
-	}
-
-	cMesh *& operator()(const unsigned int element)
-	{
-		return force_v[element];
-	}
-
-	const cMesh *const & operator()(const unsigned int element) const
-	{
-		return force_v[element];
-	}
-
-	vector<cMesh *>::iterator begin()
-	{
-		return force_v.begin();
-	}
-
-	vector<cMesh *>::iterator end()
-	{
-		return force_v.end();
-	}
-
-	unsigned int size() const
-	{
-		return force_v.size();
-	}
-	std::vector<cMesh*> force_v;	
-private:
-
-};
 
 //---------------------------------------------------------------------------
 // DECLARED VARIABLES
@@ -117,8 +55,7 @@ cMesh* object;
 cShapeLine* magneticLine;
 
 // two sphere position at the end of the magnetic line
-cShapeSphere* sphereA;
-cShapeSphere* sphereB;
+cShapeSphere* sphereA, *sphereB;
 
 // a light source to illuminate the objects in the virtual scene
 cLight *light;
@@ -127,8 +64,7 @@ cLight *light;
 cBitmap* logo;
 
 // width and height of the current window display
-int displayW = 0;
-int displayH = 0;
+int displayW = 0, displayH = 0;
 
 // a haptic device handler
 cHapticDeviceHandler* handler;
@@ -146,17 +82,14 @@ bool simulationRunning = false;
 void updateCameraPosition();
 
 // camera position and orientation is spherical coordinates
-double cameraAngleH;
-double cameraAngleV;
-double cameraDistance;
+double cameraAngleH, cameraAngleV, cameraDistance;
 cVector3d cameraPosition;
 
 // camera status
 bool flagCameraInMotion;
 
 // mouse position and button status
-int mouseX, mouseY;
-int mouseButton;
+int mouseX, mouseY, mouseButton;
 
 // root resource path
 string resourceRoot;
@@ -198,29 +131,10 @@ void updateHaptics(void);
 
 // loads a bitmap file and create 3D height map based on pixel color
 int loadHeightMap(cMesh* , int , int, int);
-int loadForceFields();
 
-
-//===========================================================================
 /*
-DEMO:    map.cpp
-
-This example illustrates the construction a triangle based object.
-The application first loads a bitmap texture image. For each pixel,
-we then define a height by computing the gray-scale value. A vertex
-is created for each pixel and triangles are then generated to connect
-the array of vertices together. This example also demonstrates the
-use of mouse callback commands to allow the operator to control the
-position of the virtual camera. The operator can also use the haptic
-device (user switch command) to move the camera or grasp a point on the
-surface and deform the terrain.
-
-In the main haptics loop function  "updateHaptics()" , the position
-of the haptic device is retrieved at each simulation iteration.
-The interaction forces are then computed and sent to the device.
+	The main function initializes everything.
 */
-//===========================================================================
-
 int main(int argc, char* argv[])
 {
 	//-----------------------------------------------------------------------
@@ -264,6 +178,7 @@ int main(int argc, char* argv[])
 	light->m_ambient.set(0.5, 0.5, 0.5);
 	light->m_diffuse.set(0.8, 0.8, 0.8);
 	light->m_specular.set(1.0, 1.0, 1.0);
+
 	//-----------------------------------------------------------------------
 	// HAPTIC DEVICES / TOOLS
 	//-----------------------------------------------------------------------
@@ -315,6 +230,7 @@ int main(int argc, char* argv[])
 	//-----------------------------------------------------------------------
 	// COMPOSE THE VIRTUAL SCENE
 	//-----------------------------------------------------------------------
+
 	// create a new mesh to display a height map
 	object = new cMesh(world);
 	for (int i = 0; i < forces.size();++i)
@@ -328,8 +244,6 @@ int main(int argc, char* argv[])
 	loadHeightMap(object,0,0,255);
 	loadHeightMap(forces[UP], 255, 0, 0);
 	loadHeightMap(forces[DOWN], 0, 255, 0);
-	
-
 	loadHeightMap(forces[LEFT], 255, 255, 0);
 	loadHeightMap(forces[RIGHT], 255, 0, 255);
 	object->setTransparencyLevel(100, true, true);
@@ -343,44 +257,6 @@ int main(int argc, char* argv[])
 	// workspace scale factor
 	double stiffnessMax = info.m_maxForceStiffness / workspaceScaleFactor;
 	object->setStiffness(0.5 * stiffnessMax, true);
-
-	// create a small vertical white magnetic line that will be activated when the
-	// user deforms the mesh.
-	magneticLine = new cShapeLine(cVector3d(0, 0, 0), cVector3d(0, 0, 0));
-	world->addChild(magneticLine);
-	magneticLine->m_ColorPointA.set(0.6, 0.6, 0.6);
-	magneticLine->m_ColorPointB.set(0.6, 0.6, 0.6);
-	magneticLine->setShowEnabled(false);
-
-	// set haptic properties
-	magneticLine->m_material.setStiffness(0.05 * stiffnessMax);
-	magneticLine->m_material.setMagnetMaxForce(0.2 * info.m_maxForce);
-	magneticLine->m_material.setMagnetMaxDistance(0.25);
-	magneticLine->m_material.setViscosity(0.05 * info.m_maxLinearDamping);
-
-	// create a haptic magnetic effect
-	cEffectMagnet* newEffect = new cEffectMagnet(magneticLine);
-	magneticLine->addEffect(newEffect);
-
-	// disable haptic feedback for now
-	magneticLine->setHapticEnabled(false);
-
-	// create two sphere that will be added at both ends of the line
-	sphereA = new cShapeSphere(0.02);
-	sphereB = new cShapeSphere(0.02);
-	world->addChild(sphereA);
-	world->addChild(sphereB);
-	sphereA->setShowEnabled(false);
-	sphereB->setShowEnabled(false);
-
-	// define some material properties for spheres
-	cMaterial matSphere;
-	matSphere.m_ambient.set(0.5, 0.2, 0.2);
-	matSphere.m_diffuse.set(0.8, 0.4, 0.4);
-	matSphere.m_specular.set(1.0, 1.0, 1.0);
-	sphereA->setMaterial(matSphere);
-	sphereB->setMaterial(matSphere);
-
 
 	//-----------------------------------------------------------------------
 	// OPEN GL - WINDOW DISPLAY
@@ -430,8 +306,9 @@ int main(int argc, char* argv[])
 	return (0);
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	Resize the program window.
+*/
 void resizeWindow(int w, int h)
 {
 	// update the size of the viewport
@@ -440,8 +317,10 @@ void resizeWindow(int w, int h)
 	glViewport(0, 0, displayW, displayH);
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	When a button is pressed, this function is called.
+	Inside this function we therefore handle all key-based events.
+*/
 void keySelect(unsigned char key, int x, int y)
 {
 	// escape key
@@ -507,8 +386,9 @@ void keySelect(unsigned char key, int x, int y)
 	
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	When the mouse button is pressed, the world can be moved
+*/
 void mouseClick(int button, int state, int x, int y)
 {
 	// mouse button down
@@ -527,8 +407,9 @@ void mouseClick(int button, int state, int x, int y)
 	}
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	When the mouse moves, the world should move with it
+*/
 void mouseMove(int x, int y)
 {
 	if (flagCameraInMotion)
@@ -551,22 +432,21 @@ void mouseMove(int x, int y)
 	mouseY = y;
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	Close the program
+*/
 void close(void)
 {
-	// stop the simulation
 	simulationRunning = false;
 
 	// wait for graphics and haptics loops to terminate
 	while (!simulationFinished) { cSleepMs(100); }
-
-	// close haptic device
 	tool->stop();
 }
 
-//---------------------------------------------------------------------------
-
+/*
+	Updates the graphics displayed
+*/
 void updateGraphics(void)
 {
 	// update object normals
@@ -579,38 +459,30 @@ void updateGraphics(void)
 	// render world
 	camera->renderView(displayW, displayH);
 
-	// Swap buffers
 	glutSwapBuffers();
 
-	// check for any OpenGL errors
 	GLenum err;
 	err = glGetError();
 	if (err != GL_NO_ERROR) printf("Error:  %s\n", gluErrorString(err));
 
-	// inform the GLUT window to call updateGraphics again (next frame)
 	if (simulationRunning)
 	{
 		glutPostRedisplay();
 	}
 }
 
-//---------------------------------------------------------------------------
 
+/*
+	Updates the haptic feedback
+*/
 void updateHaptics(void)
 {
-	// state machine
 	const int STATE_IDLE = 1;
-	const int STATE_MODIFY_MAP = 2;
-	const int STATE_MOVE_CAMERA = 3;
+	const int STATE_MOVE_CAMERA = 2;
 	int state = STATE_IDLE;
 
-	// current tool position
-	cVector3d toolGlobalPos;        // global world coordinates
-	cVector3d toolLocalPos;         // local coordinates
-
-	// previous tool position
-	cVector3d prevToolGlobalPos;    // global world coordinates
-	cVector3d prevToolLocalPos;     // local coordinates
+	// Tool positions
+	cVector3d toolGlobalPos, toolLocalPos, prevToolGlobalPos, prevToolLocalPos;
 
 	// main haptic simulation loop
 	while (simulationRunning)
@@ -631,30 +503,25 @@ void updateHaptics(void)
 		toolGlobalPos = tool->getDeviceGlobalPos();
 		toolLocalPos = tool->getDeviceLocalPos();
 
-		if ((state == STATE_MOVE_CAMERA) && (!userSwitch))
+		if ((state == STATE_MOVE_CAMERA) && (!userSwitch)) // Stop moving camera
 		{
 			state = STATE_IDLE;
-
-			// enable haptic interaction with map
 			object->setHapticEnabled(true, true);
 			for (auto i : forces)
 			{
 				i->setHapticEnabled(true, true);
 			}
 		}
-		// user clicks with the mouse
-		else if ((state == STATE_IDLE) && (userSwitch))
+		else if ((state == STATE_IDLE) && (userSwitch)) // Start moving camera
 		{
 			state = STATE_MOVE_CAMERA;
-
-			// disable haptic interaction with map
 			object->setHapticEnabled(false, true);
 			for (auto i : forces)
 			{
 				i->setHapticEnabled(false, true);
 			}
 		}
-		else if (state == STATE_MOVE_CAMERA)
+		else if (state == STATE_MOVE_CAMERA) // Keep moving camera
 		{
 			// compute tool offset
 			cVector3d offset = toolLocalPos - prevToolLocalPos;
@@ -667,7 +534,7 @@ void updateHaptics(void)
 			updateCameraPosition();
 		}
 
-		for (int i = 0; i < forces.size(); ++i) 
+		for (int i = 0; i < forces.size(); ++i) // Check if we are affected by a new force
 		{
 			if (tool->isInContact(forces[i]))
 			{				
@@ -682,11 +549,10 @@ void updateHaptics(void)
 			}
 		}
 	
-		// store tool position
 		prevToolLocalPos = toolLocalPos;
 		prevToolGlobalPos = toolGlobalPos;
 
-		// send forces to device
+		// Check if we want to invert the force
 		int local_invertation = invertation;
 		if (local_invertation == 1)
 		{
@@ -726,19 +592,21 @@ void updateHaptics(void)
 		tool->applyForces();
 	}
 
-	// exit haptics thread
 	simulationFinished = true;
 }
 
-//---------------------------------------------------------------------------
+/*
+	Create a new mesh from a map-file.
+	This is used to create the objects the tool can interact with.
 
+	The parameters red, green and blue specify what the colour of a pixel should be
+	to become part of the mesh.
+*/
 int loadHeightMap(cMesh * obj, int red, int green, int blue)
 {
-	// create a texture file
 	cTexture2D* newTexture = new cTexture2D();
 	world->addTexture(newTexture);
 
-	// texture 2D
 	bool fileload = newTexture->loadFromFile(RESOURCE_PATH("resources/images/map.bmp"));
 	if (!fileload)
 	{
@@ -753,23 +621,16 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 		return (-1);
 	}
 
-	// get the size of the texture image (U and V)
 	int texSizeU = newTexture->m_image.getWidth();
 	int texSizeV = newTexture->m_image.getHeight();
 
-	// check size of image
-	if ((texSizeU < 1) || (texSizeV < 1)) { return (false); }
+	if ((texSizeU < 1) || (texSizeV < 1))
+	{
+		return false;
+	}
 
 	// we look for the largest side
-	int largestSide;
-	if (texSizeU > texSizeV)
-	{
-		largestSide = texSizeU;
-	}
-	else
-	{
-		largestSide = texSizeV;
-	}
+	int largestSide = max(texSizeV, texSizeU);
 
 	// The largest side of the map has a length of 1.0
 	// we now compute the respective size for 1 pixel of the image in world space.
@@ -782,21 +643,20 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	double offsetV = 0.5 * (double) texSizeV * size;
 
 	// For each pixel of the image, create a vertex
-	int u, v;
-	for (v = 0; v<texSizeV; v++)
+	for (int v = 0; v<texSizeV; v++)
 	{
-		for (u = 0; u<texSizeU; u++)
+		for (int u = 0; u<texSizeU; u++)
 		{
 			double px, py, tu, tv;
 
-			// compute the height of the vertex
 			cColorb color = newTexture->m_image.getPixelColor(u, v);
 			double height = -1;
-			if (color.getB() == blue && color.getR() == red && color.getG() == green)
+			// The height should only be set if the pixel matches
+			if (color.getB() == blue && color.getR() == red && color.getG() == green) 
 			{
 					height = 0.1;
 			}
-			else if (blue == 255 && red == 0 && green == 0) // Ground
+			else if (blue == 255 && red == 0 && green == 0) // Or if it's the ground
 			{
 					height = 0;
 			}
@@ -804,22 +664,18 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 			px = size * (double) u - offsetU;
 			py = size * (double) v - offsetV;
 
-			// create new vertex
-		
+			// create new vertex		
 			unsigned int index = obj->newVertex(px, py, height);
 			cVertex* vertex = obj->getVertex(index);
 			
-			// compute texture coordinate
-			tu = (double) u / texSizeU;
-			tv = (double) v / texSizeV;
-			vertex->setTexCoord(tu, tv);
+			vertex->setTexCoord(double(u) / double(texSizeU), double(v) / double(texSizeV));
 		}
 	}
 
 	// Create a triangle based map using the above pixels
-	for (v = 0; v<(texSizeV - 1); v++)
+	for (int v = 0; v<(texSizeV - 1); v++)
 	{
-		for (u = 0; u<(texSizeU - 1); u++)
+		for (int u = 0; u<(texSizeU - 1); u++)
 		{
 			// get the indexing numbers of the next four vertices
 			unsigned int index00 = ((v + 0) * texSizeU) + (u + 0);
@@ -873,14 +729,13 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 
 	// update global position
 	obj->computeGlobalPositions();
-	obj->setTransparencyLevel(0, true, true);
-	// success
-	return (0);
+	obj->setTransparencyLevel(0, true, true); 
+	return EXIT_SUCCESS;
 }
 
-//---------------------------------------------------------------------------
-
-
+/*
+	Updates the camera position
+*/
 void updateCameraPosition()
 {
 	// check values
