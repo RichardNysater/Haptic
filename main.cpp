@@ -55,6 +55,78 @@ void close(void); // function called before exiting the application
 void updateGraphics(void); // main graphics callback
 void updateHaptics(void); // main haptics loop
 int loadHeightMap(cMesh*, int, int, int); // loads a bitmap file and create 3D height map based on pixel color
+void glut_start(int argc, char** argv); // Start rendering
+const double initializeTools(); // Initialize the tool and haptic devices
+void loadWorld(const double); // Load the world
+
+
+/*
+	Loads the world. This means the walls, invisible roof and forces.
+*/
+void loadWorld(const double stiffnessMax)
+{
+	solidWorld = new cMesh(world); // create new meshes for the solid world and the forces
+
+	world->addChild(solidWorld);
+	roof = new cMesh(world);
+	world->addChild(roof);
+	for (unsigned int i = 0; i < forces.size(); ++i)
+	{
+		forces[i] = new cMesh(world);
+		world->addChild(forces[i]);
+	}
+
+	// load maps
+	loadHeightMap(solidWorld, 0, 0, 255); // Solid world is blue
+	loadHeightMap(forces[UP], 255, 0, 0); // Up is red
+	loadHeightMap(forces[DOWN], 0, 255, 0); // Down is green
+	loadHeightMap(forces[LEFT], 255, 255, 0); // Left is yellow
+	loadHeightMap(forces[RIGHT], 255, 0, 255); // Right is pink
+	loadHeightMap(roof, 255, 255, 255);//Roof special case
+	solidWorld->setTransparencyLevel(100, true, true); //Solid world should be opaque
+	solidWorld->setUseTexture(false);
+	solidWorld->setStiffness(0.5 * stiffnessMax, true);
+}
+
+/*
+	Initialize the tool and other haptic devices.
+*/
+const double initializeTools()
+{
+	handler = new cHapticDeviceHandler(); // create a haptic device handler
+
+	cGenericHapticDevice* hapticDevice; // get access to the first available haptic device
+	handler->getDevice(hapticDevice, 0);
+
+	cHapticDeviceInfo info; // retrieve information about the current haptic device
+	if (hapticDevice)
+	{
+		info = hapticDevice->getSpecifications();
+	}
+	tool = new cGeneric3dofPointer(world); // create a 3D tool and add it to the world
+	camera->addChild(tool);// attach tool to camera
+
+	// position tool workspace in front of camera (x-axis of camera reference pointing towards the viewer)
+	tool->setPos(-cameraDistance, 0.0, 0.0);
+	tool->setHapticDevice(hapticDevice); // connect the haptic device to the tool
+	tool->start(); 	// initialize tool by connecting to haptic device
+	tool->setWorkspaceRadius(1.0); // map the physical workspace of the haptic device to a larger virtual workspace.
+	tool->setRadius(0.03); // define a radius for the tool (graphical display)
+	tool->m_deviceSphere->setShowEnabled(false); // hide the device sphere. only show proxy.
+	proxyRadius = 0.0; 	// set the physical readius of the proxy.
+	tool->m_proxyPointForceModel->setProxyRadius(proxyRadius);
+	tool->m_proxyPointForceModel->m_collisionSettings.m_checkBothSidesOfTriangles = false;
+
+	// read the scale factor between the physical workspace of the haptic
+	// device and the virtual workspace defined for the tool
+	const double workspaceScaleFactor = tool->getWorkspaceScaleFactor();
+
+	// define a maximum stiffness that can be handled by the current
+	// haptic device. The value is scaled to take into account the
+	// workspace scale factor
+	const double stiffnessMax = info.m_maxForceStiffness / workspaceScaleFactor;
+	return stiffnessMax;
+}
 
 /*
 The main function initializes everything.
@@ -95,103 +167,11 @@ int main(int argc, char* argv[])
 	// HAPTIC DEVICES / TOOLS
 	//-----------------------------------------------------------------------
 
-	handler = new cHapticDeviceHandler(); // create a haptic device handler
+	const double stiffnessMax = initializeTools(); // Initialize the tool and get the max stiffness
+		
+	loadWorld(stiffnessMax); // Load the world (walls, roof and forces)
 
-
-	cGenericHapticDevice* hapticDevice; // get access to the first available haptic device
-	handler->getDevice(hapticDevice, 0);
-
-
-	cHapticDeviceInfo info; // retrieve information about the current haptic device
-	if (hapticDevice)
-	{
-		info = hapticDevice->getSpecifications();
-	}
-
-	tool = new cGeneric3dofPointer(world); // create a 3D tool and add it to the world
-	camera->addChild(tool);// attach tool to camera
-
-	// position tool workspace in front of camera (x-axis of camera reference pointing towards the viewer)
-	// tool->setPos(-cameraDistance, 0.0, 0.0);
-	tool->setPos(-1, 4, 4);
-	tool->setHapticDevice(hapticDevice); // connect the haptic device to the tool
-	tool->start(); 	// initialize tool by connecting to haptic device
-	tool->setWorkspaceRadius(1.0); // map the physical workspace of the haptic device to a larger virtual workspace.
-	tool->setRadius(0.03); // define a radius for the tool (graphical display)
-	tool->m_deviceSphere->setShowEnabled(false); // hide the device sphere. only show proxy.
-	proxyRadius = 0.0; 	// set the physical readius of the proxy.
-	tool->m_proxyPointForceModel->setProxyRadius(proxyRadius);
-	tool->m_proxyPointForceModel->m_collisionSettings.m_checkBothSidesOfTriangles = false;
-
-	//-----------------------------------------------------------------------
-	// COMPOSE THE VIRTUAL SCENE
-	//-----------------------------------------------------------------------
-	solidWorld = new cMesh(world); // create new meshes for the solid world and the forces
-
-	world->addChild(solidWorld);
-	roof = new cMesh(world);
-	world->addChild(roof);
-	for (unsigned int i = 0; i < forces.size(); ++i)
-	{
-		forces[i] = new cMesh(world);
-		world->addChild(forces[i]);
-	}
-
-	// load maps
-	loadHeightMap(solidWorld, 0, 0, 255); // Solid world is blue
-	loadHeightMap(forces[UP], 255, 0, 0); // Up is red
-	loadHeightMap(forces[DOWN], 0, 255, 0); // Down is green
-	loadHeightMap(forces[LEFT], 255, 255, 0); // Left is yellow
-	loadHeightMap(forces[RIGHT], 255, 0, 255); // Right is pink
-	loadHeightMap(roof, 255, 255, 255);//Roof special case
-	solidWorld->setTransparencyLevel(100, true, true); //Solid world should be opaque
-	solidWorld->setUseTexture(false);
-
-	// read the scale factor between the physical workspace of the haptic
-	// device and the virtual workspace defined for the tool
-	double workspaceScaleFactor = tool->getWorkspaceScaleFactor();
-
-	// define a maximum stiffness that can be handled by the current
-	// haptic device. The value is scaled to take into account the
-	// workspace scale factor
-	double stiffnessMax = info.m_maxForceStiffness / workspaceScaleFactor;
-	solidWorld->setStiffness(0.5 * stiffnessMax, true);
-
-	//-----------------------------------------------------------------------
-	// OPEN GL - WINDOW DISPLAY
-	//-----------------------------------------------------------------------
-	glutInit(&argc, argv); // initialize GLUT
-
-	// retrieve the resolution of the computer display and estimate the position
-	// of the GLUT window so that it is located at the center of the screen
-	int screenW = glutGet(GLUT_SCREEN_WIDTH);
-	int screenH = glutGet(GLUT_SCREEN_HEIGHT);
-	int windowPosX = (screenW - WINDOW_SIZE_W) / 2;
-	int windowPosY = (screenH - WINDOW_SIZE_H) / 2;
-
-	// initialize the OpenGL GLUT window
-	glutInitWindowPosition(windowPosX, windowPosY);
-	glutInitWindowSize(WINDOW_SIZE_W, WINDOW_SIZE_H);
-	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
-	glutCreateWindow(argv[0]);
-	glutDisplayFunc(updateGraphics);
-	glutMouseFunc(mouseClick);
-	glutMotionFunc(mouseMove);
-	glutKeyboardFunc(keySelect);
-	glutReshapeFunc(resizeWindow);
-	glutSetWindowTitle("IDCL - Haptics project");
-
-
-	//-----------------------------------------------------------------------
-	// START SIMULATION
-	//-----------------------------------------------------------------------
-	programRunning = true;
-
-	cThread* hapticsThread = new cThread(); // create a thread which starts the main haptics rendering loop
-	hapticsThread->set(updateHaptics, CHAI_THREAD_PRIORITY_HAPTICS);
-
-	glutMainLoop(); 	// start the main graphics rendering loop
-	close();
+	glut_start(argc, argv); // Start rendering with OpenGL
 	return (EXIT_SUCCESS);
 }
 
@@ -321,31 +301,6 @@ void close(void)
 		cSleepMs(100);
 	}
 	tool->stop();
-}
-
-/*
-Updates the graphics displayed
-*/
-void updateGraphics(void)
-{
-	/* update solidWorld normals
-	//solidWorld->computeAllNormals(true);
-	//for (int i = 0; i<forces.size();++i)
-	{
-	//    forces[i]->computeAllNormals(true);
-	}
-	// render world*/
-	camera->renderView(displayW, displayH);
-
-	glutSwapBuffers();
-
-	if (programRunning)
-	{
-		glutPostRedisplay();
-	}
-
-	std::cerr << iterations << std::endl;
-	iterations++;
 }
 
 /*
@@ -591,7 +546,6 @@ int loadHeightMap(cMesh * obj, int red, int green, int blue)
 	obj->setUseCulling(false);
 	obj->computeGlobalPositions();
 	obj->setTransparencyLevel(0, true, true);  // Set mesh as invisible
-
 	return EXIT_SUCCESS;
 }
 
@@ -633,4 +587,65 @@ void updateCameraPosition()
 
 	if (tool != NULL) // update tool position
 		tool->setPos(-cameraDistance, 0.0, 0.0);
+}
+
+/*
+Starts the opengl graphics
+*/
+void glut_start(int argc, char** argv)
+{
+	glutInit(&argc, argv); // initialize GLUT
+
+	// retrieve the resolution of the computer display and estimate the position
+	// of the GLUT window so that it is located at the center of the screen
+	int screenW = glutGet(GLUT_SCREEN_WIDTH);
+	int screenH = glutGet(GLUT_SCREEN_HEIGHT);
+	int windowPosX = (screenW - WINDOW_SIZE_W) / 2;
+	int windowPosY = (screenH - WINDOW_SIZE_H) / 2;
+
+	// initialize the OpenGL GLUT window
+	glutInitWindowPosition(windowPosX, windowPosY);
+	glutInitWindowSize(WINDOW_SIZE_W, WINDOW_SIZE_H);
+	glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
+	glutCreateWindow(argv[0]);
+	glutDisplayFunc(updateGraphics);
+	glutMouseFunc(mouseClick);
+	glutMotionFunc(mouseMove);
+	glutKeyboardFunc(keySelect);
+	glutReshapeFunc(resizeWindow);
+	glutSetWindowTitle("IDCL - Haptics project");
+
+	// START SIMULATION
+	programRunning = true;
+
+	cThread* hapticsThread = new cThread(); // create a thread which starts the main haptics rendering loop
+	hapticsThread->set(updateHaptics, CHAI_THREAD_PRIORITY_HAPTICS);
+
+	glutMainLoop(); 	// start the main graphics rendering loop
+	close();
+}
+
+/*
+Updates the graphics displayed
+*/
+void updateGraphics(void)
+{
+	/* update solidWorld normals
+	//solidWorld->computeAllNormals(true);
+	//for (int i = 0; i<forces.size();++i)
+	{
+	//    forces[i]->computeAllNormals(true);
+	}
+	// render world*/
+	camera->renderView(displayW, displayH);
+
+	glutSwapBuffers();
+
+	if (programRunning)
+	{
+		glutPostRedisplay();
+	}
+
+	std::cerr << iterations << std::endl;
+	iterations++;
 }
