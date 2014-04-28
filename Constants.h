@@ -1,3 +1,13 @@
+#include "chai3d.h"
+
+const int WINDOW_SIZE_W = 800, WINDOW_SIZE_H = 600;// initial size (width/height) in pixels of the display window
+const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2; // mouse menu options (right button)
+const double MESH_SCALE_SIZE = 2.0; // size of map
+const int FORCE_AMOUNT = 4;
+
+/*
+The available directions for forces.
+*/
 enum FORCE_DIRECTION
 {
 	UP,
@@ -14,9 +24,10 @@ Colours: up = red, down = green, left = yellow, right = pink
 class Forces
 {
 public:
-	Forces()
+
+	Forces(int forceAmount)
 	{
-		force_v.resize(4);
+		force_v.resize(forceAmount);
 	}
 
 	cMesh *& operator[](const unsigned int element)
@@ -53,7 +64,6 @@ public:
 	{
 		return force_v.size();
 	}
-	std::vector<cMesh*> force_v;
 private:
-
+	std::vector<cMesh*> force_v;
 };
