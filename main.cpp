@@ -59,7 +59,6 @@ void glut_start(int argc, char** argv); // Start rendering
 const double initializeTools(); // Initialize the tool and haptic devices
 void loadWorld(const double); // Load the world
 
-
 /*
 	Loads the world. This means the walls, invisible roof and forces.
 */
@@ -82,7 +81,7 @@ void loadWorld(const double stiffnessMax)
 	loadHeightMap(forces[DOWN], 0, 255, 0); // Down is green
 	loadHeightMap(forces[LEFT], 255, 255, 0); // Left is yellow
 	loadHeightMap(forces[RIGHT], 255, 0, 255); // Right is pink
-	loadHeightMap(roof, 255, 255, 255);//Roof special case
+	loadHeightMap(roof, 255, 255, 255); // Roof special case
 	solidWorld->setTransparencyLevel(100, true, true); //Solid world should be opaque
 	solidWorld->setUseTexture(false);
 	solidWorld->setStiffness(0.5 * stiffnessMax, true);
@@ -129,19 +128,10 @@ const double initializeTools()
 }
 
 /*
-The main function initializes everything.
+	Initialize the camera and light.
 */
-int main(int argc, char* argv[])
+void initializeCamera()
 {
-	// parse first arg to try and locate resources
-	resourceRoot = string(argv[0]).substr(0, string(argv[0]).find_last_of("/\\") + 1);
-
-	world = new cWorld(); // create a new world.
-
-	// set the background color of the environment
-	// the color is defined by its (R,G,B) components.
-	world->setBackgroundColor(0.1, 0.1, 0.1);
-
 	camera = new cCamera(world); // create a camera and insert it into the virtual world
 	world->addChild(camera);
 
@@ -162,17 +152,6 @@ int main(int argc, char* argv[])
 	light->m_ambient.set(0.5, 0.5, 0.5);
 	light->m_diffuse.set(0.8, 0.8, 0.8);
 	light->m_specular.set(1.0, 1.0, 1.0);
-
-	//-----------------------------------------------------------------------
-	// HAPTIC DEVICES / TOOLS
-	//-----------------------------------------------------------------------
-
-	const double stiffnessMax = initializeTools(); // Initialize the tool and get the max stiffness
-		
-	loadWorld(stiffnessMax); // Load the world (walls, roof and forces)
-
-	glut_start(argc, argv); // Start rendering with OpenGL
-	return (EXIT_SUCCESS);
 }
 
 /*
@@ -648,4 +627,25 @@ void updateGraphics(void)
 
 	std::cerr << iterations << std::endl;
 	iterations++;
+}
+
+/*
+The main function initializes everything.
+*/
+int main(int argc, char* argv [])
+{
+	// parse first arg to try and locate resources
+	resourceRoot = string(argv[0]).substr(0, string(argv[0]).find_last_of("/\\") + 1);
+
+	world = new cWorld(); // create a new world.
+
+	// set the background color of the environment
+	// the color is defined by its (R,G,B) components.
+	world->setBackgroundColor(0.1, 0.1, 0.1);
+
+	initializeCamera();
+	const double stiffnessMax = initializeTools(); // Initialize the tool and get the max stiffness
+	loadWorld(stiffnessMax); // Load the world (walls, roof and forces)
+	glut_start(argc, argv); // Start rendering with OpenGL
+	return (EXIT_SUCCESS);
 }
