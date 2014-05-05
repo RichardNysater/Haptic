@@ -24,7 +24,7 @@ using std::cout; using std::endl; using std::cerr;
 //---------------------------------------------------------------------------
 // DECLARED VARIABLES
 //---------------------------------------------------------------------------
-vector<Field> fields; // Vector with all the forcefields
+vector<Field> fields; // Vector with all the force fields
 LoadMap loadMap;
 long long iterations = 0;
 bool worldTransparent = false, forcesTransparent = true;
@@ -144,10 +144,11 @@ void loadWorld(const double stiffnessMax)
 	walls = new cMesh(world); // create new meshes for the solid world and the forces
 	roof = new cMesh(world);
 	switchWalls = new cMesh(world);
+
 	world->addChild(walls);	
 	world->addChild(roof);
 	world->addChild(switchWalls);
-	// load maps
+
 	if (loadMap.loadWalls(world, walls, proxyRadius, fields) != EXIT_SUCCESS)
 	{
 		cerr << "Error loading walls!" << endl;
@@ -159,12 +160,16 @@ void loadWorld(const double stiffnessMax)
 		close();
 	}
 	if (loadMap.loadSwitchWalls(world, switchWalls, proxyRadius) != EXIT_SUCCESS)
+	{
+		cerr << "Error loading switchwalls!" << endl;
 		close();
+	}
 	
-	walls->setTransparencyLevel(100, true, true); //Solid world should be opaque
-	walls->setUseTexture(true);
-	switchWalls->setTransparencyLevel(100, true, true);
+	walls->setTransparencyLevel(100, true, true); // walls should be visible
+	switchWalls->setTransparencyLevel(100, true, true); // switchwalls should be visible
 	walls->setStiffness(0.5 * stiffnessMax, true);
+	roof->setStiffness(0.5 * stiffnessMax, true);
+	switchWalls->setStiffness(0.5 * stiffnessMax, true);
 }
 
 /*
@@ -425,7 +430,6 @@ void updateGraphics(void)
 	rateLabel->m_string = buffer;
 	// update walls normals
 	walls->computeAllNormals(true);
-	
 	
 	// render world
 	camera->renderView(displayW, displayH);

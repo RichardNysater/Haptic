@@ -137,6 +137,13 @@ public:
 	}
 
 private:
+	enum DIRECTION
+	{
+		UP,
+		DOWN,
+		LEFT,
+		RIGHT
+	};
 	bool initVars = false;
 	cVector3d span;
 	double scaleFactor;
@@ -159,8 +166,6 @@ private:
 		cColorb color = newTexture->m_image.getPixelColor(u, v);
 		return (color.getR() == 0 && color.getG() == 0 && color.getB() == 255);
 	}
-
-
 
 	/*
 		Create a new mesh from a map-file.
@@ -209,7 +214,6 @@ private:
 			offsetU = 0.5 * (double) imageWidth * imageSize;
 			offsetV = 0.5 * (double) imageHeight * imageSize;
 		}
-		bool up = false, down = false, right = false, left = false;
 
 		for (int v = 0; v < imageHeight; v++) // For each pixel of the image, create a vertex
 		{
@@ -218,124 +222,36 @@ private:
 				double px, py;
 				cColorb color = newTexture->m_image.getPixelColor(u, v);
 				double height = 0;
-				//if (color.getR() == 0 && color.getB() == 0 && color.getG() == 0) // No need to create triangles for black areas
-				//	continue;
 
-				if (loadRoof) // create the roof 
+				px = imageSize * (double) u - offsetU;
+				py = imageSize * (double) v - offsetV;
+				bool load = false;
+				if (loadRoof) // create roof 
 				{
 					height = 0.1;
 					px = imageSize * (double) u - offsetU - 0.1;
 					py = imageSize * (double) v - offsetV;
+					load = true;
 				}
-				else if (!loadSwitchWalls && isWall(newTexture,u,v)) // Walls are blue
+				else if (!loadSwitchWalls && isWall(newTexture,u,v)) // create walls
 				{					
 					height = 0.1;
+					load = true;
 				}
-				else if (loadSwitchWalls && isSwitch(newTexture,u,v))
+				else if (loadSwitchWalls && isSwitch(newTexture,u,v)) //create switchwalls
 				{
-					if (!left && u != 0 && v != 0)
+					if (!isSwitch(newTexture, u - 1, v) && loadedPixels[u][v] == -1) // Load the pixels next to the switchwalls
 					{
-						if (!isSwitch(newTexture, u - 1, v))
-						{
-							left = true;
-							auto p = loadSide(loadedPixels, newTexture, obj, u - 1, v, 0, 1);
-// 							int i = u - 1;
-// 							int j = v;
-// 							while (!isSwitch(newTexture, i, j) && isSwitch(newTexture,i+1,j)) //left
-// 							{
-// 								px = imageSize * (double) i - offsetU;
-// 								py = imageSize * (double) j - offsetV;
-// 								cerr << "left: " << i << " " << j << endl;
-// 								unsigned int leftindex = obj->newVertex(px, py, 0); // create new vertex
-// 								cVertex* leftvertex = obj->getVertex(leftindex);
-// 								leftvertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-// 								loadedPixels[i][j] = leftindex;
-// 								j++;
-// 							}
-							int i;
-							int j;
-							if (!isSwitch(newTexture, p.first+1, p.second) && !up) //up
-							{
-								up = true;
-								i = u;
-								j = p.second;
-								while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i, j - 1))
-								{
-									px = imageSize * (double) i - offsetU;
-									py = imageSize * (double) j - offsetV;
-									cerr << "up: " << i << " " << j << endl;
-									unsigned int upindex = obj->newVertex(px, py, 0); // create new vertex
-									cVertex* upvertex = obj->getVertex(upindex);
-									upvertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-									loadedPixels[i][j] = upindex;
-									i++;
-								}
-							}
-							px = imageSize * (double) i - offsetU;
-							py = imageSize * (double) j - offsetV;
-							cerr << "special: " << i << " " << j;
-							unsigned int tmp = obj->newVertex(px, py, 0); // create new vertex
-							cVertex* tmpv = obj->getVertex(tmp);
-							tmpv->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-							loadedPixels[i][j] = tmp;
-						}
+						auto p = loadSide(loadedPixels, newTexture, obj, u, v, DIRECTION::LEFT);
+						p = loadSide(loadedPixels, newTexture, obj, u, p.second, DIRECTION::UP);
+						p = loadSide(loadedPixels, newTexture, obj, u, v, DIRECTION::DOWN);
+						p = loadSide(loadedPixels, newTexture, obj, p.first, p.second, DIRECTION::RIGHT);
 					}
-					if (!down && u != imageWidth - 1 && v != 0)
-					{
-						if (!isSwitch(newTexture, u, v-1))
-						{
-							down = true;
-							int i = u;
-							int j = v-1;
-							while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i, j+1)) //down
-							{
-								px = imageSize * (double) i - offsetU;
-								py = imageSize * (double) j - offsetV;
-								cerr << "down: " << i << " " << j << endl;
-								unsigned int downindex = obj->newVertex(px, py, 0); // create new vertex
-								cVertex* downvertex = obj->getVertex(downindex);
-								downvertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-								loadedPixels[i][j] = downindex;
-								i++;
-							}
-
-							j += 1;
-							if (!isSwitch(newTexture, i, j))
-							{
-								
-								right = true;
-								while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i - 1, j)) //left
-								{
-									px = imageSize * (double) i - offsetU;
-									py = imageSize * (double) j - offsetV;
-									cerr << "right: " << i << " " << j << endl;
-									unsigned int rightindex = obj->newVertex(px, py, 0); // create new vertex
-									cVertex* rightvertex = obj->getVertex(rightindex);
-									rightvertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-									loadedPixels[i][j] = rightindex;
-									j++;
-								}
-							}
-							up = false;
-							down = false;
-							right = false;
-							left = false;
-						}
-					}
-
 					height = 0.1;
-					px = imageSize * (double) u - offsetU;
-					py = imageSize * (double) v - offsetV;
-					unsigned int index = obj->newVertex(px, py, height); // create new vertex
-					cVertex* vertex = obj->getVertex(index);
-					vertex->setTexCoord(double(u) / double(imageWidth), double(v) / double(imageHeight));
-					loadedPixels[u][v] = index;
+					load = true;
 				}
-				if (!loadSwitchWalls)
+				if (load || !loadSwitchWalls)
 				{
-
-					px = imageSize * (double) u - offsetU;
-					py = imageSize * (double) v - offsetV;
 					unsigned int index = obj->newVertex(px, py, height); // create new vertex
 					cVertex* vertex = obj->getVertex(index);
 					vertex->setTexCoord(double(u) / double(imageWidth), double(v) / double(imageHeight));
@@ -387,8 +303,6 @@ private:
 			initVars = true;
 		}
 		
-
-		
 		obj->scale(scaleFactor);
 
 		// Load all the forcefields when loading the walls
@@ -410,24 +324,69 @@ private:
 		return EXIT_SUCCESS;
 	}
 
-	pair<int,int> loadSide(vector< vector< int >>& loadedPixels, cTexture2D* newTexture, cMesh * obj, int start_x, int start_y, int x_direction, int y_direction)
+	/*
+		Loads the pixels to along one of the sides of an area.
+	*/
+	pair<int,int> loadSide(vector< vector< int >>& loadedPixels, cTexture2D* newTexture, cMesh * obj, int start_x, int start_y, DIRECTION dir)
 	{
-		int i = start_x;
-		int j = start_y;
+		int x_direction, y_direction, look_x, look_y;
+
 		double offsetU = 0.5 * (double) imageWidth * imageSize;
 		double offsetV = 0.5 * (double) imageHeight * imageSize;
 
-		while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i + 1, j)) //left
+		switch (dir)
+		{
+		case UP:
+			start_x++;
+			y_direction = 0;
+			x_direction = 1;
+			look_x = 0;
+			look_y = -1;
+			break;
+		case DOWN:
+			start_y--;
+			y_direction = 0;
+			x_direction = 1;
+			look_x = 0;
+			look_y = +1;
+			break;
+		case LEFT:
+			start_x--;
+			y_direction = 1;
+			x_direction = 0;
+			look_x = 1;
+			look_y = 0;
+			break;
+		case RIGHT:
+			start_y++;
+			y_direction = 1;
+			x_direction = 0;
+			look_x = -1;
+			look_y = 0;
+			break;
+		}
+		int i = start_x;
+		int j = start_y;
+		bool isswtich = isSwitch(newTexture, i, j);
+		while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i + look_x, j+look_y) && loadedPixels[i][j] == -1) //left
 		{
 			double px = imageSize * (double) i - offsetU;
 			double py = imageSize * (double) j - offsetV;
-			
 			unsigned int index = obj->newVertex(px, py, 0); // create new vertex
 			cVertex* vertex = obj->getVertex(index);
 			vertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
 			loadedPixels[i][j] = index;
 			i += x_direction;
 			j += y_direction;
+		}
+		if (loadedPixels[i][j] == -1)
+		{
+			double px = imageSize * (double) i - offsetU;
+			double py = imageSize * (double) j - offsetV;
+			unsigned int tmp = obj->newVertex(px, py, 0); // create new vertex
+			cVertex* tmpv = obj->getVertex(tmp);
+			tmpv->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
+			loadedPixels[i][j] = tmp;
 		}
 		return std::make_pair(i, j);
 	}
