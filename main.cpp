@@ -29,6 +29,8 @@ bool worldTransparent = false, forcesTransparent = true;
 int inversion = 1;// -1 if inverted
 
 // Pre-existing variables
+cLabel* rateLabel; // FPS tracker
+double FPS = 0;
 cWorld* world; // a world that contains all objects of the virtual environment
 cCamera* camera; // a camera that renders the world in a window display
 cMesh* walls, * roof; // a mesh object used to create the height map
@@ -60,25 +62,6 @@ int loadHeightMap(cMesh*, bool); // loads a bitmap file and create 3D height map
 void glut_start(int argc, char** argv); // Start rendering
 const double initializeTools(); // Initialize the tool and haptic devices
 void loadWorld(const double); // Load the world
-
-/*
-	Loads the world. This means the walls, invisible roof and forces.
-*/
-void loadWorld(const double stiffnessMax)
-{
-	walls = new cMesh(world); // create new meshes for the solid world and the forces
-
-	world->addChild(walls);
-	roof = new cMesh(world);
-	world->addChild(roof);
-
-	// load maps
-	loadHeightMap(walls,false); // false if walls
-	//loadHeightMap(roof, true); // true if roof
-	walls->setTransparencyLevel(100, true, true); //Solid world should be opaque
-	walls->setUseTexture(true);
-	walls->setStiffness(0.5 * stiffnessMax, true);
-}
 
 /*
 	Initialize the tool and other haptic devices.
@@ -145,126 +128,96 @@ void initializeCamera()
 	light->m_ambient.set(0.5, 0.5, 0.5);
 	light->m_diffuse.set(0.8, 0.8, 0.8);
 	light->m_specular.set(1.0, 1.0, 1.0);
+
+	rateLabel = new cLabel();
+	rateLabel->setPos(8, 24, 0);
+	camera->m_front_2Dscene.addChild(rateLabel);
+
 }
 
 /*
-Update the size of the viewport
+Loads the world. This means the walls, invisible roof and forces.
 */
-void resizeWindow(int w, int h)
+void loadWorld(const double stiffnessMax)
 {
-	displayW = w;
-	displayH = h;
-	glViewport(0, 0, displayW, displayH);
+	walls = new cMesh(world); // create new meshes for the solid world and the forces
+
+	world->addChild(walls);
+	roof = new cMesh(world);
+	world->addChild(roof);
+
+	// load maps
+	loadHeightMap(walls, false); // false if walls
+	loadHeightMap(roof, true); // true if roof
+	walls->setTransparencyLevel(100, true, true); //Solid world should be opaque
+	walls->setUseTexture(true);
+	walls->setStiffness(0.5 * stiffnessMax, true);
 }
 
 /*
-When a button is pressed, this function is called.
-Inside this function we therefore handle all key-based events.
+	Handles the actions of pressing buttons on the haptic device
 */
-void keySelect(unsigned char key, int x, int y)
+int checkButtons(int state, cVector3d toolLocalPos, cVector3d prevToolLocalPos)
 {
-	if ((key == 27) || (key == 'x')) // Escape key
+	const int STATE_IDLE = 1;
+	const int STATE_MOVE_CAMERA = 2;
+	const int STATE_NOHAPTIC = 3;
+
+	bool userSwitch = tool->getUserSwitch(0);
+	bool hapticSwitch = tool->getUserSwitch(1);
+
+
+	if (hapticSwitch) // Disable haptics while this button is held
 	{
-		close();
-		exit(EXIT_SUCCESS);
+		walls->setHapticEnabled(false, true);
+		roof->setHapticEnabled(false, true);
 	}
-	else if (key == '1')
+	else
 	{
-		bool useTexture = walls->getUseTexture();
-		walls->setUseTexture(!useTexture);
+		walls->setHapticEnabled(true, true);
+		roof->setHapticEnabled(true, true);
 	}
-	else if (key == '2')
+
+	if ((state == STATE_MOVE_CAMERA) && (!userSwitch)) // Stop moving camera
 	{
-		bool useWireMode = walls->getWireMode();
-		walls->setWireMode(!useWireMode);
+		state = STATE_IDLE;
+		walls->setHapticEnabled(true, true);
+		roof->setHapticEnabled(true, true);
 	}
-	else if (key == '3')
+	else if ((state == STATE_IDLE) && (userSwitch)) // Start moving camera
 	{
-		// INTENTIONALLY LEFT BLANK
+		state = STATE_MOVE_CAMERA;
+		walls->setHapticEnabled(false, true);
+		roof->setHapticEnabled(false, true);
 	}
-	else if (key == '4')
+	else if (state == STATE_MOVE_CAMERA) // Keep moving camera
 	{
-		inversion *= -1;
+		cVector3d offset = toolLocalPos - prevToolLocalPos; // compute tool offset
+		cameraDistance = cameraDistance - 2 * offset.x; // apply camera motion
+		cameraAngleH = cameraAngleH - 40 * offset.y;
+		cameraAngleV = cameraAngleV - 40 * offset.z;
+
+		updateCameraPosition();
 	}
-	else if (key == '5')
-	{
-		if (worldTransparent)
-		{
-			walls->setTransparencyLevel(0, true, true);
-		}
-		else
-		{
-			walls->setTransparencyLevel(100, true, true);
-		}
-		worldTransparent = !worldTransparent;
-	}
+	return state;
 }
 
-/*
-When the mouse button is pressed, the world can be moved
-*/
-void mouseClick(int button, int state, int x, int y)
-{
-	if (state == GLUT_DOWN) // mouse button down
-	{
-		flagCameraInMotion = true;
-		mouseX = x;
-		mouseY = y;
-		mouseButton = button;
-	}
-	else if (state == GLUT_UP) // mouse button up
-	{
-		flagCameraInMotion = false;
-	}
-}
-
-/*
-When the mouse moves, the world should move with it
-*/
-void mouseMove(int x, int y)
-{
-	if (flagCameraInMotion)
-	{
-		if (mouseButton == GLUT_RIGHT_BUTTON)
-		{
-			cameraDistance = cameraDistance - 0.01 * (y - mouseY);
-		}
-
-		else if (mouseButton == GLUT_LEFT_BUTTON)
-		{
-			cameraAngleH = cameraAngleH - (x - mouseX);
-			cameraAngleV = cameraAngleV + (y - mouseY);
-		}
-	}
-	updateCameraPosition();
-
-	mouseX = x;
-	mouseY = y;
-}
-
-/*
-Close the program
-*/
-void close(void)
-{
-	programRunning = false;
-
-	// wait for graphics and haptics loops to terminate
-	while (!programFinished)
-	{
-		cSleepMs(100);
-	}
-	tool->stop();
-}
 
 /*
 Updates the haptic feedback
 */
 void updateHaptics(void)
 {
-	const int STATE_IDLE = 1;
-	const int STATE_MOVE_CAMERA = 2;
-	int state = STATE_IDLE;
+	cPrecisionClock pclock;
+	pclock.setTimeoutPeriodSeconds(1.0);
+	pclock.start(true);
+
+	cPrecisionClock clock;
+	clock.start(true);
+
+	int counter = 0;
+
+	int state = 1;
 
 	cVector3d toolGlobalPos, toolLocalPos, prevToolGlobalPos, prevToolLocalPos; // Tool positions
 
@@ -275,50 +228,16 @@ void updateHaptics(void)
 		tool->updatePose(); // update position, orientation of tool and compute forces
 		tool->computeInteractionForces();
 
-		bool userSwitch = tool->getUserSwitch(0);
-
 		toolGlobalPos = tool->getDeviceGlobalPos(); // update tool position
 		toolLocalPos = tool->getDeviceLocalPos();
 
-		if ((state == STATE_MOVE_CAMERA) && (!userSwitch)) // Stop moving camera
-		{
-			state = STATE_IDLE;
-			walls->setHapticEnabled(true, true);
-		}
-		else if ((state == STATE_IDLE) && (userSwitch)) // Start moving camera
-		{
-			state = STATE_MOVE_CAMERA;
-			walls->setHapticEnabled(false, true);
-		}
-		else if (state == STATE_MOVE_CAMERA) // Keep moving camera
-		{
-			cVector3d offset = toolLocalPos - prevToolLocalPos; // compute tool offset
-			cameraDistance = cameraDistance - 2 * offset.x; // apply camera motion
-			cameraAngleH = cameraAngleH - 40 * offset.y;
-			cameraAngleV = cameraAngleV - 40 * offset.z;
+		state = checkButtons(state,toolLocalPos,prevToolLocalPos);
 
-			updateCameraPosition();
-		}
-		
 		prevToolLocalPos = toolLocalPos;
 		prevToolGlobalPos = toolGlobalPos;
 
-		int local_inversion = inversion; // Check if we want to invert the force
-		if (local_inversion == 1)
-		{
-			if (tool->getUserSwitch(0))
-			{
-				local_inversion = -1;
-				std::cerr << " INVERTING " << std::endl;
-			}
-			else
-			{
-				local_inversion = 1;
-			}
-		}
-
 		//std::cerr << tool->getDeviceGlobalPos().x << " " << tool->getDeviceGlobalPos().y << " " << tool->getDeviceGlobalPos().z << std::endl;
-		
+
 		for (int ind = 0; ind < fields.size(); ++ind)
 		{
 			if (fields[ind].isInside(tool))
@@ -327,35 +246,40 @@ void updateHaptics(void)
 				switch (fields[ind].direction())
 				{
 				case DOWN:
-					std::cerr << "DOWN " << std::endl;
+					//std::cerr << "DOWN " << std::endl;
 					//tool->m_lastComputedGlobalForce.add(cVector3d(0, 0, -10*local_inversion));
-					tool->m_lastComputedGlobalForce.x = 3; 
+					tool->m_lastComputedGlobalForce.x = 3;
 					tool->m_lastComputedGlobalForce.y = 0;
 					break;
 				case UP:
-					std::cerr << "UP " << std::endl;
+					//std::cerr << "UP " << std::endl;
 					tool->m_lastComputedGlobalForce.x = -3;
 					tool->m_lastComputedGlobalForce.y = 0;
 					break;
 				case LEFT:
-					std::cerr << "LEFT " << std::endl;
+					//std::cerr << "LEFT " << std::endl;
 					tool->m_lastComputedGlobalForce.x = 0;
 					tool->m_lastComputedGlobalForce.y = -3;
 					break;
 				case RIGHT:
-					std::cerr << "RIGHT " << std::endl;
+					//std::cerr << "RIGHT " << std::endl;
 					tool->m_lastComputedGlobalForce.x = 0;
 					tool->m_lastComputedGlobalForce.y = 3;
 					break;
-				}				
+				}
 			}
 		}
 
 		tool->applyForces();
-		
+
+
+		if (pclock.timeoutOccurred()) {
+			FPS = iterations;
+			iterations = 0;
+			pclock.start(true);
+		}
 	}
 	programFinished = true;
-
 }
 
 /*
@@ -458,7 +382,6 @@ int loadHeightMap(cMesh * obj, bool roof)
 #else
 	bool fileload = newTexture->loadFromFile(RESOURCE_PATH("images/map.bmp"));
 #endif
-	std::cerr << fileload << std::endl;
 	if (!fileload)
 	{
 		printf("Error - Texture image failed to load correctly.\n");
@@ -492,7 +415,6 @@ int loadHeightMap(cMesh * obj, bool roof)
 		{
 			double px, py;
 			cColorb color = newTexture->m_image.getPixelColor(u, v);
-
 			double height = 0;
 			if (roof) // create the roof 
 			{
@@ -518,6 +440,9 @@ int loadHeightMap(cMesh * obj, bool roof)
 	{
 		for (int u = 0; u < (imageWidth - 1); u++)
 		{
+			cColorb color = newTexture->m_image.getPixelColor(u, v);
+			if (color.getR() == 0 && color.getB() == 0 && color.getG() == 0) // No need to create triangles for black areas
+				continue;
 			// get the indexing numbers of the next four vertices
 			unsigned int index00 = ((v + 0) * imageWidth) + (u + 0);
 			unsigned int index01 = ((v + 0) * imageWidth) + (u + 1);
@@ -564,6 +489,49 @@ int loadHeightMap(cMesh * obj, bool roof)
 	obj->computeGlobalPositions();
 	obj->setTransparencyLevel(0, true, true);  // Set mesh as invisible
 	return EXIT_SUCCESS;
+}
+
+/*
+When a button is pressed, this function is called.
+Inside this function we therefore handle all key-based events.
+*/
+void keySelect(unsigned char key, int x, int y)
+{
+	if ((key == 27) || (key == 'x')) // Escape key
+	{
+		close();
+		exit(EXIT_SUCCESS);
+	}
+	else if (key == '1')
+	{
+		bool useTexture = walls->getUseTexture();
+		walls->setUseTexture(!useTexture);
+	}
+	else if (key == '2')
+	{
+		bool useWireMode = walls->getWireMode();
+		walls->setWireMode(!useWireMode);
+	}
+	else if (key == '3')
+	{
+		// INTENTIONALLY LEFT BLANK
+	}
+	else if (key == '4')
+	{
+		inversion *= -1;
+	}
+	else if (key == '5')
+	{
+		if (worldTransparent)
+		{
+			walls->setTransparencyLevel(0, true, true);
+		}
+		else
+		{
+			walls->setTransparencyLevel(100, true, true);
+		}
+		worldTransparent = !worldTransparent;
+	}
 }
 
 /*
@@ -647,6 +615,9 @@ Updates the graphics displayed
 */
 void updateGraphics(void)
 {
+	char buffer[128];
+	sprintf(buffer, "FPS: %.0lf ", FPS);
+	rateLabel->m_string = buffer;
 	// update walls normals
 	walls->computeAllNormals(true);
 	
@@ -661,6 +632,73 @@ void updateGraphics(void)
 		glutPostRedisplay();
 	}
 	iterations++;
+}
+
+/*
+Update the size of the viewport
+*/
+void resizeWindow(int w, int h)
+{
+	displayW = w;
+	displayH = h;
+	glViewport(0, 0, displayW, displayH);
+}
+
+/*
+When the mouse button is pressed, the world can be moved
+*/
+void mouseClick(int button, int state, int x, int y)
+{
+	if (state == GLUT_DOWN) // mouse button down
+	{
+		flagCameraInMotion = true;
+		mouseX = x;
+		mouseY = y;
+		mouseButton = button;
+	}
+	else if (state == GLUT_UP) // mouse button up
+	{
+		flagCameraInMotion = false;
+	}
+}
+
+/*
+When the mouse moves, the world should move with it
+*/
+void mouseMove(int x, int y)
+{
+	if (flagCameraInMotion)
+	{
+		if (mouseButton == GLUT_RIGHT_BUTTON)
+		{
+			cameraDistance = cameraDistance - 0.01 * (y - mouseY);
+		}
+
+		else if (mouseButton == GLUT_LEFT_BUTTON)
+		{
+			cameraAngleH = cameraAngleH - (x - mouseX);
+			cameraAngleV = cameraAngleV + (y - mouseY);
+		}
+	}
+	updateCameraPosition();
+
+	mouseX = x;
+	mouseY = y;
+}
+
+/*
+Close the program
+*/
+void close(void)
+{
+	programRunning = false;
+
+	// wait for graphics and haptics loops to terminate
+	while (!programFinished)
+	{
+		cSleepMs(100);
+	}
+	tool->stop();
 }
 
 /*

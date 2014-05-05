@@ -22,7 +22,7 @@ enum FORCE_DIRECTION
 	UP,
 	DOWN,
 	LEFT,
-	RIGHT,
+	RIGHT, 
 	NONE
 };
 
