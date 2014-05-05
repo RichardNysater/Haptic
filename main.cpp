@@ -267,21 +267,21 @@ void updateHaptics(void)
 					//std::cerr << "DOWN " << std::endl;
 					//tool->m_lastComputedGlobalForce.add(cVector3d(0, 0, -10*local_inversion));
 					tool->m_lastComputedGlobalForce.x = 3;
-					tool->m_lastComputedGlobalForce.y = 0;
+					//tool->m_lastComputedGlobalForce.y = 0;
 					break;
 				case UP:
 					//std::cerr << "UP " << std::endl;
 					tool->m_lastComputedGlobalForce.x = -3;
-					tool->m_lastComputedGlobalForce.y = 0;
+					//tool->m_lastComputedGlobalForce.y = 0;
 					break;
 				case LEFT:
 					//std::cerr << "LEFT " << std::endl;
-					tool->m_lastComputedGlobalForce.x = 0;
+					//tool->m_lastComputedGlobalForce.x = 0;
 					tool->m_lastComputedGlobalForce.y = -3;
 					break;
 				case RIGHT:
 					//std::cerr << "RIGHT " << std::endl;
-					tool->m_lastComputedGlobalForce.x = 0;
+					//tool->m_lastComputedGlobalForce.x = 0;
 					tool->m_lastComputedGlobalForce.y = 3;
 					break;
 				}
@@ -314,30 +314,49 @@ void keySelect(unsigned char key, int x, int y)
 	}
 	else if (key == '1')
 	{
+		cerr << "Switching texture" << endl;
 		bool useTexture = walls->getUseTexture();
 		walls->setUseTexture(!useTexture);
 	}
 	else if (key == '2')
 	{
+		cerr << "Switching wireframe" << endl;
 		bool useWireMode = walls->getWireMode();
 		walls->setWireMode(!useWireMode);
 	}
 	else if (key == '3')
 	{
+		cerr << "Switching switchwalls" << endl;
 		switchWalls->setShowEnabled(!switchWalls->getShowEnabled());
 	}
 	else if (key == '4')
 	{
-		inversion *= -1;
+		cerr << "Switching collision detection" << endl;
+		if(walls->getCollisionDetector() == NULL)
+			walls->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
+		else
+			walls->setCollisionDetector(NULL);
+
+		if (switchWalls->getCollisionDetector() == NULL)
+			switchWalls->createAABBCollisionDetector(1.01*proxyRadius, true, false);
+		else
+			switchWalls->setCollisionDetector(NULL);
+
+		if (roof->getCollisionDetector() == NULL)
+			roof->createAABBCollisionDetector(1.01*proxyRadius, true, false);
+		else
+			roof->setCollisionDetector(NULL);
 	}
 	else if (key == '5')
 	{
 		if (worldTransparent)
 		{
+			cerr << "Walls are invisible" << endl;
 			walls->setTransparencyLevel(0, true, true);
 		}
 		else
 		{
+			cerr << "Walls are visible" << endl;
 			walls->setTransparencyLevel(100, true, true);
 		}
 		worldTransparent = !worldTransparent;
