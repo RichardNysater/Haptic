@@ -1,7 +1,7 @@
 /*
 	This header contains most of the constants used in the program.
 */
-
+#pragma once
 #include "chai3d.h"
 #include <iostream>
 #include <map>

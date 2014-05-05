@@ -16,6 +16,7 @@ as published by the Free Software Foundation.
 #include <string.h>
 #include "chai3d.h"
 #include "Constants.h"
+#include "loadMap.h"
 
 using std::vector; using std::pair; using std::make_pair;
 using std::cout; using std::endl; using std::cerr;
@@ -24,6 +25,7 @@ using std::cout; using std::endl; using std::cerr;
 // DECLARED VARIABLES
 //---------------------------------------------------------------------------
 vector<Field> fields; // Vector with all the forcefields
+LoadMap loadMap;
 long long iterations = 0;
 bool worldTransparent = false, forcesTransparent = true;
 int inversion = 1;// -1 if inverted
@@ -33,7 +35,7 @@ cLabel* rateLabel; // FPS tracker
 double FPS = 0;
 cWorld* world; // a world that contains all objects of the virtual environment
 cCamera* camera; // a camera that renders the world in a window display
-cMesh* walls, * roof; // a mesh object used to create the height map
+cMesh* walls, * roof, *switchWalls; // a mesh object used to create the height map
 cLight *light; // a light source to illuminate the objects in the virtual scene
 int displayW = 0, displayH = 0; // width and height of the current window display
 cHapticDeviceHandler* handler; // a haptic device handler
@@ -44,10 +46,10 @@ double cameraAngleH, cameraAngleV, cameraDistance; // camera position and orient
 cVector3d cameraPosition;
 bool flagCameraInMotion;
 int mouseX, mouseY, mouseButton; // mouse position and button status
-string resourceRoot; // root resource path
+
 bool programFinished = false; // has exited haptics simulation thread
 
-#define RESOURCE_PATH(p)    (char*)((resourceRoot+string(p)).c_str()) // convert to resource path
+
 
 // DECLARED FUNCTIONS
 void updateCameraPosition(); // update camera settings
@@ -58,7 +60,6 @@ void mouseMove(int x, int y); // callback to handle mouse motion
 void close(void); // function called before exiting the application
 void updateGraphics(void); // main graphics callback
 void updateHaptics(void); // main haptics loop
-int loadHeightMap(cMesh*, bool); // loads a bitmap file and create 3D height map based on pixel color
 void glut_start(int argc, char** argv); // Start rendering
 const double initializeTools(); // Initialize the tool and haptic devices
 void loadWorld(const double); // Load the world
@@ -141,16 +142,28 @@ Loads the world. This means the walls, invisible roof and forces.
 void loadWorld(const double stiffnessMax)
 {
 	walls = new cMesh(world); // create new meshes for the solid world and the forces
-
-	world->addChild(walls);
 	roof = new cMesh(world);
+	switchWalls = new cMesh(world);
+	world->addChild(walls);	
 	world->addChild(roof);
-
+	world->addChild(switchWalls);
 	// load maps
-	loadHeightMap(walls, false); // false if walls
-	loadHeightMap(roof, true); // true if roof
+	if (loadMap.loadWalls(world, walls, proxyRadius, fields) != EXIT_SUCCESS)
+	{
+		cerr << "Error loading walls!" << endl;
+		close();
+	}
+	if (loadMap.loadRoof(world, roof, proxyRadius) != EXIT_SUCCESS)
+	{
+		cerr << "Error loading roof!" << endl;
+		close();
+	}
+	if (loadMap.loadSwitchWalls(world, switchWalls, proxyRadius) != EXIT_SUCCESS)
+		close();
+	
 	walls->setTransparencyLevel(100, true, true); //Solid world should be opaque
 	walls->setUseTexture(true);
+	switchWalls->setTransparencyLevel(100, true, true);
 	walls->setStiffness(0.5 * stiffnessMax, true);
 }
 
@@ -282,214 +295,6 @@ void updateHaptics(void)
 	programFinished = true;
 }
 
-/*
-	cColorb does not overload the == operator, so this function checks
-	if two colours are the same.
-*/
-bool color_equal(const cColorb& c1, const cColorb& c2)
-{
-	return (c1.getR() == c2.getR() && c1.getG() == c2.getG() && c1.getB() == c2.getB());
-}
-
-/*
-	Loads all the force fields from the bitmap
-*/
-vector<Field> loadFields(cTexture2D * newTexture, double scaleFactor)
-{
-	int imageWidth = newTexture->m_image.getWidth();
-	int imageHeight = newTexture->m_image.getHeight();
-
-	int largestSide = max(imageHeight, imageWidth); // we look for the largest side
-
-	// The largest side of the map has a length of 1.0
-	// we now compute the respective size for 1 pixel of the image in world space.
-	double size = 1.0 / (double) largestSide;
-
-	double offsetU = 0.5 * (double) imageWidth * size;
-	double offsetV = 0.5 * (double) imageHeight * size;
-
-
-	std::pair<int, int> upper_left, upper_right, lower_left, lower_right;
-
-	vector<Field> fields;
-	vector<PixelArea> areas; // Represents a field in the image.
-
-	for (int u = 0; u < imageWidth; u++) // For each pixel of the image
-	{
-		for (int v = 0; v < imageHeight; v++)
-		{
-			bool visited = false;
-			for (int index = 0; index < areas.size(); ++index) // Check if we've been at this pixel before
-			{
-				if (areas[index].isInside(u, v))
-				{
-					visited = true; // This pixel has already been added
-					break;
-				}
-			}
-			if (visited) // Only proceed with non-visited pixels
-				continue;
-
-			cColorb color = newTexture->m_image.getPixelColor(u, v);
-			if (COLOUR_TO_DIR[color] == NONE) // Only add fields with a direction
-				continue;
-
-			int i = u, j = v;
-			upper_left = std::make_pair(i, j); // Starting point is upper left
-
-			// While the pixel colour is the same, keep going right
-			while (color_equal(color, newTexture->m_image.getPixelColor(i+1, j)))
-			{
-				++i;
-				if (i == imageWidth - 1)
-					break;
-			}
-			upper_right = std::make_pair(i, j); // Upper right is when colour changed
-
-			// While the pixel colour is the same, keep going down
-			while (color_equal(color, newTexture->m_image.getPixelColor(i, j+1)))
-			{
-				++j;
-				if (j == imageHeight - 1)
-					break;
-			}
-			lower_right = std::make_pair(i, j); // Lower right is when colour changed
-			lower_left = std::make_pair(upper_left.first, j); // Lower left is when colour changed both directions
-			
-			areas.push_back(PixelArea(upper_left, upper_right, lower_left, lower_right)); // Mark this area as visited
-
-			// Create a new field from this area
-			fields.push_back(areas.back().create_field(imageWidth,imageHeight,size,offsetU,offsetV,scaleFactor,COLOUR_TO_DIR[color]));
-		}
-	}
-	return fields;
-}
-
-/*
-Create a new mesh from a map-file.
-This is used to create the objects the tool can interact with.
-
-The parameters red, green and blue specify what the colour of a pixel should be
-to become part of the mesh.
-*/
-int loadHeightMap(cMesh * obj, bool roof)
-{
-	cTexture2D* newTexture = new cTexture2D();
-	world->addTexture(newTexture);
-	std::cerr << resourceRoot << std::endl;
-#if defined(_MSVC)
-	bool fileload = newTexture->loadFromFile("map.bmp");
-#else
-	bool fileload = newTexture->loadFromFile(RESOURCE_PATH("images/map.bmp"));
-#endif
-	if (!fileload)
-	{
-		printf("Error - Texture image failed to load correctly.\n");
-		close();
-		return EXIT_FAILURE;
-	}
-
-	int imageWidth = newTexture->m_image.getWidth();
-	int imageHeight = newTexture->m_image.getHeight();
-
-	if ((imageWidth < 1) || (imageHeight < 1)) // Image too small
-	{
-		return false;
-	}
-
-	int largestSide = max(imageHeight, imageWidth); // we look for the largest side
-
-	// The largest side of the map has a length of 1.0
-	// we now compute the respective size for 1 pixel of the image in world space.
-	double size = 1.0 / (double) largestSide;
-
-	// we will create an triangle based object. For centering puposes we
-	// compute an offset for axis X and Y corresponding to the half size
-	// of the image map.
-	double offsetU = 0.5 * (double) imageWidth * size;
-	double offsetV = 0.5 * (double) imageHeight * size;
-	
-	for (int v = 0; v < imageHeight; v++) // For each pixel of the image, create a vertex
-	{
-		for (int u = 0; u < imageWidth; u++)
-		{
-			double px, py;
-			cColorb color = newTexture->m_image.getPixelColor(u, v);
-			double height = 0;
-			if (roof) // create the roof 
-			{
-				height = 0.1;
-				px = size * (double) u - offsetU - 0.1;
-				py = size * (double) v - offsetV;
-			}
-			else if (color.getB() == 255 && color.getR() == 0 && color.getG() == 0) // Walls are blue
-			{
-				height = 0.1;
-			}
-
-			px = size * (double) u - offsetU;
-			py = size * (double) v - offsetV;
-			unsigned int index = obj->newVertex(px, py, height); // create new vertex
-			cVertex* vertex = obj->getVertex(index);
-
-			vertex->setTexCoord(double(u) / double(imageWidth), double(v) / double(imageHeight));
-		}
-	}
-
-	for (int v = 0; v < (imageHeight - 1); v++) // Create a triangle based map using the above pixels
-	{
-		for (int u = 0; u < (imageWidth - 1); u++)
-		{
-			cColorb color = newTexture->m_image.getPixelColor(u, v);
-			if (color.getR() == 0 && color.getB() == 0 && color.getG() == 0) // No need to create triangles for black areas
-				continue;
-			// get the indexing numbers of the next four vertices
-			unsigned int index00 = ((v + 0) * imageWidth) + (u + 0);
-			unsigned int index01 = ((v + 0) * imageWidth) + (u + 1);
-			unsigned int index10 = ((v + 1) * imageWidth) + (u + 0);
-			unsigned int index11 = ((v + 1) * imageWidth) + (u + 1);
-
-			// create two new triangles
-			obj->newTriangle(index00, index01, index10);
-			obj->newTriangle(index10, index01, index11);
-		}
-	}
-
-	// apply texture, compute normals and size
-	obj->setTexture(newTexture);
-	obj->setUseTexture(true);
-	obj->computeAllNormals(true);
-	obj->computeBoundaryBox(true);
-
-	cVector3d min = obj->getBoundaryMin();
-	cVector3d max = obj->getBoundaryMax();
-
-	cVector3d span = cSub(max, min); // This is the "size" of the object
-	size = cMax(span.x, cMax(span.y, span.z));
-
-	// We'll center all vertices, then multiply by this amount,
-	// to scale to the desired size.
-	double scaleFactor = MESH_SCALE_SIZE / size;
-	obj->scale(scaleFactor);
-
-	// Load all the forcefields when loading the walls
-	if (!roof) 
-		fields = loadFields(newTexture, scaleFactor);
-
-	obj->computeBoundaryBox(true); // compute size of object again
-
-	// Build a collision-detector for this object, so
-	// the proxy will work nicely when haptics are enabled.
-	obj->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
-
-	// set size of frame and normals, then render and update
-	obj->setFrameSize(0.2, true);
-	obj->setNormalsProperties(0.01, cColorf(1.0, 0.0, 0.0, 1.0), true);
-	obj->setUseCulling(false);
-	obj->computeGlobalPositions();
-	obj->setTransparencyLevel(0, true, true);  // Set mesh as invisible
-	return EXIT_SUCCESS;
-}
 
 /*
 When a button is pressed, this function is called.
@@ -514,7 +319,7 @@ void keySelect(unsigned char key, int x, int y)
 	}
 	else if (key == '3')
 	{
-		// INTENTIONALLY LEFT BLANK
+		switchWalls->setShowEnabled(!switchWalls->getShowEnabled());
 	}
 	else if (key == '4')
 	{
@@ -707,9 +512,7 @@ The main function initializes everything.
 int main(int argc, char* argv [])
 {
 	initializeConstants();
-	// parse first arg to try and locate resources
-	resourceRoot = string(argv[0]).substr(0, string(argv[0]).find_last_of("/\\") + 1);
-
+	loadMap.initialize(argv);
 	world = new cWorld(); // create a new world.
 
 	// set the background color of the environment
