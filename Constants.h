@@ -6,8 +6,11 @@
 #include <iostream>
 #include <map>
 
+using std::cerr; using std::endl;
 typedef std::pair<double, double> point;
 
+int resistors = 0;
+const int START_VELOCITY = 5;
 const int WINDOW_SIZE_W = 800, WINDOW_SIZE_H = 600;// initial size (width/height) in pixels of the display window
 const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2; // mouse menu options (right button)
 const double MESH_SCALE_SIZE = 2.0; // size of map
@@ -22,8 +25,23 @@ enum FORCE_DIRECTION
 	UP,
 	DOWN,
 	LEFT,
-	RIGHT, 
-	NONE
+	RIGHT
+};
+
+enum RESISTOR
+{
+	UP_RES,
+	DOWN_RES,
+	LEFT_RES,
+	RIGHT_RES
+};
+
+enum BATTERY
+{
+	BATTERY_UP,
+	BATTERY_DOWN,
+	BATTERY_LEFT,
+	BATTERY_RIGHT
 };
 
 /*
@@ -42,8 +60,10 @@ struct colorcomp {
 	}
 };
 
-// Colours represent force directions, this map keeps track of them
+// Colours represent force directions and resistors, this map keeps track of them
 std::map<cColorb, FORCE_DIRECTION, colorcomp> COLOUR_TO_DIR; 
+std::map<cColorb, RESISTOR, colorcomp> COLOUR_TO_RES;
+std::map<cColorb, BATTERY, colorcomp> COLOUR_TO_BAT;
 
 /*
 Initializes constants that cannot be initialized on compile time.
@@ -51,11 +71,34 @@ Yes, this can be done in c+11 or with boost, but we can use neither.
 */
 void initializeConstants()
 {
+
+	// Direction of forces
 	COLOUR_TO_DIR[cColorb(255, 0, 255)] = UP;  // Pink
 	COLOUR_TO_DIR[cColorb(255, 0, 0)] = RIGHT; // Red
 	COLOUR_TO_DIR[cColorb(255, 255, 0)] = DOWN; // Yellow
 	COLOUR_TO_DIR[cColorb(0, 255, 0)] = LEFT; // Green
-	COLOUR_TO_DIR[cColorb(0, 0, 255)] = NONE; // Blue
+
+	COLOUR_TO_DIR[cColorb(128, 0, 128)] = UP;  // Pink resistor
+	COLOUR_TO_DIR[cColorb(128, 0, 0)] = RIGHT; // Red resistor
+	COLOUR_TO_DIR[cColorb(128, 128, 0)] = DOWN; // Yellow resistor
+	COLOUR_TO_DIR[cColorb(0, 128, 0)] = LEFT; // Green resistor
+
+	COLOUR_TO_DIR[cColorb(255, 192, 255)] = UP;  // Pink battery
+	COLOUR_TO_DIR[cColorb(255, 192, 192)] = RIGHT; // Red battery
+	COLOUR_TO_DIR[cColorb(255, 255, 192)] = DOWN; // Yellow battery
+	COLOUR_TO_DIR[cColorb(192, 255, 192)] = LEFT; // Green battery
+
+	// Resistors
+	COLOUR_TO_RES[cColorb(128, 0, 128)] = UP_RES;  // Pink resistor
+	COLOUR_TO_RES[cColorb(128, 0, 0)] = RIGHT_RES; // Red resistor
+	COLOUR_TO_RES[cColorb(128, 128, 0)] = DOWN_RES; // Yellow resistor
+	COLOUR_TO_RES[cColorb(0, 128, 0)] = LEFT_RES; // Green resistor
+			  
+	// Batteries
+	COLOUR_TO_BAT[cColorb(255, 192, 255)] = BATTERY_UP; // Battery pink
+	COLOUR_TO_BAT[cColorb(255, 192, 192)] = BATTERY_RIGHT; // Battery red
+	COLOUR_TO_BAT[cColorb(255, 255, 192)] = BATTERY_DOWN; // Battery yellow
+	COLOUR_TO_BAT[cColorb(192, 255, 192)] = BATTERY_LEFT; // Battery green
 }
 
 
@@ -76,14 +119,65 @@ public:
 		ll = lower_left;
 		lr = lower_right;
 		dir = direction;
+		fieldXSize = abs(ul.first - ur.first);
+		fieldYSize = abs(ul.second - lr.second);
+		isBattery = false;
+		isResistor = false;
 	}
 
+	void setVelocity(cGeneric3dofPointer* tool, double& velocity)
+	{
+		if (isBattery)
+		{
+			double distance = distanceFromStart(tool);
+			velocity = distance*START_VELOCITY;
+			cerr << distance << " inside battery. Setting velocity to: " << velocity << endl;
+		}
+		else if (isResistor)
+		{
+			double distance = distanceFromStart(tool);
+			velocity = START_VELOCITY - distance*START_VELOCITY;
+			cerr << distance << " inside resistor. Setting velocity to: " << velocity << endl;
+		}
+	}
+	
+	/*
+		Returns true if this field is a battery
+	*/
+	bool battery()
+	{
+		return isBattery;
+	}
+
+	/*
+		Sets this field to be a battery
+	*/
+	void setBattery(bool i)
+	{
+		isBattery = i;
+	}
+
+	/*
+		Returns true if this field is a resistor
+	*/
+	bool resistor()
+	{
+		return isResistor;
+	}
+
+	/*
+		Sets this field to be a resistor
+	*/
+	void setResistor(bool i)
+	{
+		isResistor = i;
+	}
 	/*
 		Checks if a tool is inside of this field
 	*/
 	bool isInside(cGeneric3dofPointer * tool) const
 	{
-		cVector3d pos = tool->getDeviceGlobalPos();
+		cVector3d pos = tool->getProxyGlobalPos();
 		return (pos.x >= ul.first && pos.x <= ur.first && pos.y >= ul.second && pos.y <= ll.second);
 	}
 
@@ -102,7 +196,33 @@ public:
 private:
 	std::pair<double, double> ul, ur, ll, lr;
 	FORCE_DIRECTION dir;
-
+	bool isBattery, isResistor;
+	double fieldXSize, fieldYSize;
+	/*
+	Returns how far the tool is from the end of the field
+	*/
+	double distanceFromStart(cGeneric3dofPointer* tool)
+	{
+		switch (dir)
+		{
+		case UP:
+			return 1-(std::abs(tool->getProxyGlobalPos().x - ul.first)) / fieldXSize;
+			break;
+		case DOWN:
+			return (std::abs(tool->getProxyGlobalPos().x - ll.first)) / fieldXSize;
+			break;
+		case LEFT:
+			return 1-(std::abs(tool->getProxyGlobalPos().y - ul.second)) / fieldYSize;
+			break;
+		case RIGHT:
+			return 1-(std::abs(tool->getProxyGlobalPos().y - ll.second)) / fieldYSize;
+			break;
+		default:
+			throw std::invalid_argument("Field does not have correct values");
+			break;
+		}
+		
+	}
 };
 
 /*

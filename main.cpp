@@ -24,15 +24,17 @@ using std::cout; using std::endl; using std::cerr;
 //---------------------------------------------------------------------------
 // DECLARED VARIABLES
 //---------------------------------------------------------------------------
+double velocity = 3;
 vector<Field> fields; // Vector with all the force fields
 LoadMap loadMap;
-long long iterations = 0;
-bool worldTransparent = false, forcesTransparent = true;
+long long curFPS = 0, curHz = 0;
+double FPS = 0, hapticHz = 0;
+bool worldTransparent = false, roofTransparent = true;
 int inversion = 1;// -1 if inverted
 
 // Pre-existing variables
-cLabel* rateLabel; // FPS tracker
-double FPS = 0;
+cLabel* FPSLabel, *HapticHzLabel; // FPS tracker
+
 cWorld* world; // a world that contains all objects of the virtual environment
 cCamera* camera; // a camera that renders the world in a window display
 cMesh* walls, * roof, *switchWalls; // a mesh object used to create the height map
@@ -48,8 +50,6 @@ bool flagCameraInMotion;
 int mouseX, mouseY, mouseButton; // mouse position and button status
 
 bool programFinished = false; // has exited haptics simulation thread
-
-
 
 // DECLARED FUNCTIONS
 void updateCameraPosition(); // update camera settings
@@ -83,16 +83,20 @@ const double initializeTools()
 	camera->addChild(tool);// attach tool to camera
 
 	// position tool workspace in front of camera (x-axis of camera reference pointing towards the viewer)
-	tool->setPos(-cameraDistance, 0.0, 0.0);
+	//tool->setPos(-cameraDistance, 0.0, 0.0);
+	
 	tool->setHapticDevice(hapticDevice); // connect the haptic device to the tool
+	
 	tool->start(); 	// initialize tool by connecting to haptic device
+	tool->setPos(-3.0, 0, 0.01); // Play around with this value
 	tool->setWorkspaceRadius(1.0); // map the physical workspace of the haptic device to a larger virtual workspace.
 	tool->setRadius(0.03); // define a radius for the tool (graphical display)
 	tool->m_deviceSphere->setShowEnabled(false); // hide the device sphere. only show proxy.
 	proxyRadius = 0.03; 	// set the physical readius of the proxy.
 	tool->m_proxyPointForceModel->setProxyRadius(proxyRadius);
-	tool->m_proxyPointForceModel->m_collisionSettings.m_checkBothSidesOfTriangles = false;
-
+	tool->m_proxyPointForceModel->m_collisionSettings.m_checkBothSidesOfTriangles = true;
+	
+	tool->getProxy()->setProxyGlobalPosition(cVector3d(-0.878378, 0.621621, 0.05));
 	// read the scale factor between the physical workspace of the haptic
 	// device and the virtual workspace defined for the tool
 	const double workspaceScaleFactor = tool->getWorkspaceScaleFactor();
@@ -130,9 +134,12 @@ void initializeCamera()
 	light->m_diffuse.set(0.8, 0.8, 0.8);
 	light->m_specular.set(1.0, 1.0, 1.0);
 
-	rateLabel = new cLabel();
-	rateLabel->setPos(8, 24, 0);
-	camera->m_front_2Dscene.addChild(rateLabel);
+	FPSLabel = new cLabel();
+	FPSLabel->setPos(8, 15, 0);
+	HapticHzLabel = new cLabel();
+	HapticHzLabel->setPos(8, 30, 0);
+	camera->m_front_2Dscene.addChild(FPSLabel);
+	camera->m_front_2Dscene.addChild(HapticHzLabel);
 
 }
 
@@ -220,7 +227,6 @@ int checkButtons(int state, cVector3d toolLocalPos, cVector3d prevToolLocalPos)
 	return state;
 }
 
-
 /*
 Updates the haptic feedback
 */
@@ -254,52 +260,48 @@ void updateHaptics(void)
 		prevToolLocalPos = toolLocalPos;
 		prevToolGlobalPos = toolGlobalPos;
 
-		//std::cerr << tool->getDeviceGlobalPos().x << " " << tool->getDeviceGlobalPos().y << " " << tool->getDeviceGlobalPos().z << std::endl;
-
+		
 		for (int ind = 0; ind < fields.size(); ++ind)
 		{
 			if (fields[ind].isInside(tool))
 			{
-				//cerr << "Inside field: " << ind << "dir: " << fields[ind].direction() << endl;
+				fields[ind].setVelocity(tool, velocity);
+				//cerr << "Inside field: " << ind << " dir: " << fields[ind].direction() << endl;
 				switch (fields[ind].direction())
 				{
 				case DOWN:
-					//std::cerr << "DOWN " << std::endl;
+					//std::cerr << "Down with velocity " << velocity << std::endl;
 					//tool->m_lastComputedGlobalForce.add(cVector3d(0, 0, -10*local_inversion));
-					tool->m_lastComputedGlobalForce.x = 3;
-					//tool->m_lastComputedGlobalForce.y = 0;
+					tool->m_lastComputedGlobalForce.x = velocity;
 					break;
 				case UP:
-					//std::cerr << "UP " << std::endl;
-					tool->m_lastComputedGlobalForce.x = -3;
-					//tool->m_lastComputedGlobalForce.y = 0;
+					//std::cerr << "Up with velocity " << velocity << std::endl;
+					tool->m_lastComputedGlobalForce.x = -velocity;
 					break;
 				case LEFT:
-					//std::cerr << "LEFT " << std::endl;
-					//tool->m_lastComputedGlobalForce.x = 0;
-					tool->m_lastComputedGlobalForce.y = -3;
+					//std::cerr << "Left with velocity " << velocity << std::endl;
+					tool->m_lastComputedGlobalForce.y = -velocity;
 					break;
 				case RIGHT:
-					//std::cerr << "RIGHT " << std::endl;
-					//tool->m_lastComputedGlobalForce.x = 0;
-					tool->m_lastComputedGlobalForce.y = 3;
+					//std::cerr << "Right with velocity " << velocity << std::endl;
+					tool->m_lastComputedGlobalForce.y = velocity;
 					break;
 				}
 			}
 		}
-
+		
 		tool->applyForces();
-
-
+		curHz++;
 		if (pclock.timeoutOccurred()) {
-			FPS = iterations;
-			iterations = 0;
+			FPS = curFPS;
+			hapticHz = curHz;
+			curHz = 0;
+			curFPS = 0;
 			pclock.start(true);
 		}
 	}
 	programFinished = true;
 }
-
 
 /*
 When a button is pressed, this function is called.
@@ -361,6 +363,20 @@ void keySelect(unsigned char key, int x, int y)
 		}
 		worldTransparent = !worldTransparent;
 	}
+	else if (key == '6')
+	{
+		if (roofTransparent)
+		{
+			cerr << "Roof is invisible" << endl;
+			roof->setTransparencyLevel(0, true, true);
+		}
+		else
+		{
+			cerr << "Roof is visible" << endl;
+			roof->setTransparencyLevel(100, true, true);
+		}
+		roofTransparent = !roofTransparent;
+	}
 }
 
 /*
@@ -399,8 +415,8 @@ void updateCameraPosition()
 
 	world->computeGlobalPositions(true); // recompute global positions
 
-	if (tool != NULL) // update tool position
-		tool->setPos(-cameraDistance, 0.0, 0.0);
+	//if (tool != NULL) // update tool position
+	//	tool->setPos(-cameraDistance, 0.0, 0.0);
 }
 
 /*
@@ -445,8 +461,10 @@ Updates the graphics displayed
 void updateGraphics(void)
 {
 	char buffer[128];
-	sprintf(buffer, "FPS: %.0lf ", FPS);
-	rateLabel->m_string = buffer;
+	sprintf(buffer, "FPS: %.0lf ", FPS); // Print the FPS (should be 30+)
+	FPSLabel->m_string = buffer;
+	sprintf(buffer, "Haptic Hz: %.0lf ", hapticHz); // Print the haptic update rate (needs to be 500+)
+	HapticHzLabel->m_string = buffer;
 	// update walls normals
 	walls->computeAllNormals(true);
 	
@@ -459,7 +477,7 @@ void updateGraphics(void)
 	{
 		glutPostRedisplay();
 	}
-	iterations++;
+	curFPS++;
 }
 
 /*
@@ -527,6 +545,7 @@ void close(void)
 		cSleepMs(100);
 	}
 	tool->stop();
+	
 }
 
 /*

@@ -75,9 +75,11 @@ public:
 					continue;
 
 				cColorb color = newTexture->m_image.getPixelColor(u, v);
-				if (COLOUR_TO_DIR[color] == NONE) // Only add fields with a direction
+				if (color.getR() == 255 && color.getB() == 255 && color.getG() == 255)
 					continue;
-
+				if (COLOUR_TO_DIR.find(color) == COLOUR_TO_DIR.end()) // Only add fields with a direction
+					continue;
+	
 				int i = u, j = v;
 				upper_left = std::make_pair(i, j); // Starting point is upper left
 
@@ -104,6 +106,15 @@ public:
 
 				// Create a new field from this area
 				fields.push_back(areas.back().create_field(imageWidth, imageHeight, size, offsetU, offsetV, scaleFactor, COLOUR_TO_DIR[color]));
+				if (COLOUR_TO_RES.find(color) != COLOUR_TO_RES.end())
+				{
+					resistors++;
+					fields.back().setResistor(true);
+				}
+				else if (COLOUR_TO_BAT.find(color) != COLOUR_TO_BAT.end())
+				{
+					fields.back().setBattery(true);
+				}
 			}
 		}
 		return fields;
@@ -229,7 +240,7 @@ private:
 				if (loadRoof) // create roof 
 				{
 					height = 0.1;
-					px = imageSize * (double) u - offsetU - 0.1;
+					px = imageSize * (double) u - offsetU;
 					py = imageSize * (double) v - offsetV;
 					load = true;
 				}
