@@ -1,3 +1,10 @@
+/**
+	This class handles the loading of resources, mainly the map and the circuit.
+	
+	@author	Richard Nysater
+	@version 1.0 2014-05-07
+*/
+
 #pragma once
 #include <string>
 #include <iostream>
@@ -10,33 +17,92 @@
 using std::string; using std::cerr; using std::endl; using std::pair;
 
 #define RESOURCE_PATH(p)    (char*)((resourceRoot+string(p)).c_str()) // convert to resource path
+
+/**
+	The LoadMap class is used to load pictures into objects and overlays.
+*/
 class LoadMap
 {
 public:
+
+	/**
+		Constructor for LoadMap
+	*/
 	LoadMap()
 	{
 
 	}
+
+	/**
+		Constructor for LoadMap
+	*/
 	LoadMap(char* argv[])
 	{
 		resourceRoot = string(argv[0]).substr(0, string(argv[0]).find_last_of("/\\") + 1);
 	}
 
+	
+	/**
+		Initialized the resourceRoot to the first argument sent to the program.
+	*/
 	void initialize(char* argv[])
 	{
 		resourceRoot = string(argv[0]).substr(0, string(argv[0]).find_last_of("/\\") + 1);
 	}
+
+	/**
+		Adds a 2d picture as the actual circuit. This picture is the one that is supposed to be displayed,
+		while the rest of the objects are invisible.
+	*/
+	void loadCircuitPicture(cBitmap * circuit, cCamera * camera)
+	{
+		circuit = new cBitmap();
+		
+		camera->m_back_2Dscene.addChild(circuit);
+		// load a "chai3d" bitmap image file
+		bool fileload;
+		fileload = circuit->m_image.loadFromFile("circuit.bmp");
+		if (!fileload)
+		{
+			fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("images/circuit.bmp"));
+		}
+		if (!fileload)
+		{
+			cerr << "Unable to load circuit. No texture found" << endl;
+			return;
+		}
+			
+		// position the logo at the bottom left of the screen (pixel coordinates)
+		circuit->setPos(169, 72, 0);
+
+		// scale the logo along its horizontal and vertical axis
+		circuit->setZoomHV(2.85, 2.85);
+
+		// here we replace all black pixels (0,0,0) of the logo bitmap
+		// with transparent black pixels (0, 0, 0, 0). This allows us to make
+		// the background of the logo look transparent.
+		
+		circuit->m_image.replace(
+			cColorb(0, 0, 0),      // original RGB color
+			cColorb(0, 0, 0, 0)    // new RGBA color
+			);
+
+		// enable transparency
+		circuit->enableTransparency(true);
+
+	}
+
 	/*
-	cColorb does not overload the == operator, so this function checks
-	if two colours are the same.
+		cColorb does not overload the == operator, so this function checks
+		if two colours are the same.
 	*/
 	bool color_equal(const cColorb& c1, const cColorb& c2)
 	{
 		return (c1.getR() == c2.getR() && c1.getG() == c2.getG() && c1.getB() == c2.getB());
 	}
 
-	/*
-	Loads all the force fields from the bitmap
+	/**
+		Loads all the force fields from the bitmap
 	*/
 	vector<Field> loadFields(cTexture2D * newTexture, double scaleFactor)
 	{
@@ -105,7 +171,7 @@ public:
 				areas.push_back(PixelArea(upper_left, upper_right, lower_left, lower_right)); // Mark this area as visited
 
 				// Create a new field from this area
-				fields.push_back(areas.back().create_field(imageWidth, imageHeight, size, offsetU, offsetV, scaleFactor, COLOUR_TO_DIR[color]));
+				fields.push_back(areas.back().createField(imageWidth, imageHeight, size, offsetU, offsetV, scaleFactor, COLOUR_TO_DIR[color]));
 				if (COLOUR_TO_RES.find(color) != COLOUR_TO_RES.end())
 				{
 					resistors++;
@@ -120,7 +186,7 @@ public:
 		return fields;
 	}
 	
-	/*
+	/**
 		Load the walls
 	*/
 	int loadWalls(cWorld* world, cMesh * obj, double proxyRadius, vector<Field>& fields)
@@ -129,7 +195,7 @@ public:
 		return loadHeightMap(world, obj, proxyRadius, false, true,false,fields);
 	}
 
-	/*
+	/**
 		Load the roof
 	*/
 	int loadRoof(cWorld* world, cMesh * obj, double proxyRadius)
@@ -138,7 +204,7 @@ public:
 		return loadHeightMap(world, obj, proxyRadius, true, false,false);
 	}
 
-	/*
+	/**
 		Load the switchwalls
 	*/
 	int loadSwitchWalls(cWorld* world, cMesh * obj, double proxyRadius)
@@ -166,19 +232,25 @@ private:
 	double imageSize;
 	double objectSize;
 
+	/**
+		Returns true if a pixel is part of a switch wall
+	*/
 	bool isSwitch(cTexture2D* newTexture, int u, int v)
 	{
 		cColorb color = newTexture->m_image.getPixelColor(u, v);
 		return (color.getR() == 128 && color.getG() == 128 && color.getB() == 128);
 	}
 
+	/**
+		Returns true if a pixel is part of a wall
+	*/
 	bool isWall(cTexture2D* newTexture, int u, int v)
 	{
 		cColorb color = newTexture->m_image.getPixelColor(u, v);
 		return (color.getR() == 0 && color.getG() == 0 && color.getB() == 255);
 	}
 
-	/*
+	/**
 		Create a new mesh from a map-file.
 		This is used to create the objects the tool can interact with.
 	*/
@@ -203,8 +275,8 @@ private:
 			imageHeight = newTexture->m_image.getHeight();
 		}
 		
-		vector < vector< int >> loadedPixels(imageHeight,vector<int>(imageWidth,-1));
-		vector<vector<int>> triangles;
+		vector< vector<int> > loadedPixels(imageHeight,vector<int>(imageWidth,-1));
+		vector< vector<int> > triangles;
 
 		if ((imageWidth < 1) || (imageHeight < 1)) // Image too small
 		{
@@ -261,6 +333,7 @@ private:
 					height = 0.1;
 					load = true;
 				}
+
 				if (load || !loadSwitchWalls)
 				{
 					unsigned int index = obj->newVertex(px, py, height); // create new vertex
@@ -278,14 +351,13 @@ private:
 				cColorb color = newTexture->m_image.getPixelColor(u, v);
 				if (color.getR() == 0 && color.getB() == 0 && color.getG() == 0) // No need to create triangles for black areas
 					continue;
+
 				// get the indexing numbers of the next four vertices
 				int index00 = loadedPixels[u][v];
 				int index01 = loadedPixels[u + 1][v];
 				int index10 = loadedPixels[u][v + 1];
 				int index11 = loadedPixels[u + 1][v + 1];
 
-				//cerr << u << " " << v << endl;
-				//cerr << index00 << " " << index01 << " " << index10<<" "<<endl;
 				if (index00 != -1 && index01 != -1 && index10 != -1 && index11 != -1)
 				{
 					obj->newTriangle(index00, index01, index10);
@@ -308,22 +380,16 @@ private:
 			cVector3d span = cSub(max, min); // This is the "size" of the object
 			objectSize = cMax(span.x, cMax(span.y, span.z));
 
-			// We'll center all vertices, then multiply by this amount,
-			// to scale to the desired size.
 			scaleFactor = MESH_SCALE_SIZE / objectSize;
 			initVars = true;
 		}
 		
 		obj->scale(scaleFactor);
 
-		// Load all the forcefields when loading the walls
 		if (loadForces)
 			fields = loadFields(newTexture, scaleFactor);
 
-		obj->computeBoundaryBox(true); // compute size of object again
-
-		// Build a collision-detector for this object, so
-		// the proxy will work nicely when haptics are enabled.
+		obj->computeBoundaryBox(true);
 		obj->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
 
 		// set size of frame and normals, then render and update
@@ -331,16 +397,16 @@ private:
 		obj->setNormalsProperties(0.01, cColorf(1.0, 0.0, 0.0, 1.0), true);
 		obj->setUseCulling(false);
 		obj->computeGlobalPositions();
-		obj->setTransparencyLevel(0, true, true);  // Set mesh as invisible
+		obj->setTransparencyLevel(0, true, true);  // Objects should be invisible
 		return EXIT_SUCCESS;
 	}
 
-	/*
-		Loads the pixels to along one of the sides of an area.
+	/**
+		Loads the pixels along one of the sides of an area.
 	*/
-	pair<int,int> loadSide(vector< vector< int >>& loadedPixels, cTexture2D* newTexture, cMesh * obj, int start_x, int start_y, DIRECTION dir)
+	pair<int,int> loadSide(vector< vector<int> >& loadedPixels, cTexture2D* newTexture, cMesh * obj, int startX, int startY, DIRECTION dir)
 	{
-		int x_direction, y_direction, look_x, look_y;
+		int xDirection = 0, yDirection = 0, lookX = 0, lookY = 0;
 
 		double offsetU = 0.5 * (double) imageWidth * imageSize;
 		double offsetV = 0.5 * (double) imageHeight * imageSize;
@@ -348,57 +414,51 @@ private:
 		switch (dir)
 		{
 		case UP:
-			start_x++;
-			y_direction = 0;
-			x_direction = 1;
-			look_x = 0;
-			look_y = -1;
+			startX++;
+			xDirection = 1;
+			lookY = -1;
 			break;
 		case DOWN:
-			start_y--;
-			y_direction = 0;
-			x_direction = 1;
-			look_x = 0;
-			look_y = +1;
+			startY--;
+			xDirection = 1;
+			lookY = +1;
 			break;
 		case LEFT:
-			start_x--;
-			y_direction = 1;
-			x_direction = 0;
-			look_x = 1;
-			look_y = 0;
+			startX--;
+			yDirection = 1;
+			lookX = 1;
 			break;
 		case RIGHT:
-			start_y++;
-			y_direction = 1;
-			x_direction = 0;
-			look_x = -1;
-			look_y = 0;
+			startY++;
+			yDirection = 1;
+			lookX = -1;
 			break;
 		}
-		int i = start_x;
-		int j = start_y;
-		bool isswtich = isSwitch(newTexture, i, j);
-		while (!isSwitch(newTexture, i, j) && isSwitch(newTexture, i + look_x, j+look_y) && loadedPixels[i][j] == -1) //left
+		int curX = startX;
+		int curY = startY;
+
+		while (!isSwitch(newTexture, curX, curY) && isSwitch(newTexture, curX + lookX, curY+lookY) && loadedPixels[curX][curY] == -1) //left
 		{
-			double px = imageSize * (double) i - offsetU;
-			double py = imageSize * (double) j - offsetV;
-			unsigned int index = obj->newVertex(px, py, 0); // create new vertex
-			cVertex* vertex = obj->getVertex(index);
-			vertex->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-			loadedPixels[i][j] = index;
-			i += x_direction;
-			j += y_direction;
+			double px = imageSize * (double) curX - offsetU;
+			double py = imageSize * (double) curY - offsetV;
+			unsigned int vertexIndex = obj->newVertex(px, py, 0); // create new vertex
+			cVertex* vertex = obj->getVertex(vertexIndex);
+			vertex->setTexCoord(double(curX) / double(imageWidth), double(curY) / double(imageHeight));
+			loadedPixels[curX][curY] = vertexIndex;
+			curX += xDirection;
+			curY += yDirection;
 		}
-		if (loadedPixels[i][j] == -1)
+
+		if (loadedPixels[curX][curY] == -1) // Pixel not yet loaded
 		{
-			double px = imageSize * (double) i - offsetU;
-			double py = imageSize * (double) j - offsetV;
-			unsigned int tmp = obj->newVertex(px, py, 0); // create new vertex
-			cVertex* tmpv = obj->getVertex(tmp);
-			tmpv->setTexCoord(double(i) / double(imageWidth), double(j) / double(imageHeight));
-			loadedPixels[i][j] = tmp;
+			double px = imageSize * (double) curX - offsetU;
+			double py = imageSize * (double) curY - offsetV;
+			unsigned int vertexIndex = obj->newVertex(px, py, 0); // create new vertex
+			cVertex* vertex = obj->getVertex(vertexIndex);
+			vertex->setTexCoord(double(curX) / double(imageWidth), double(curY) / double(imageHeight));
+			loadedPixels[curX][curY] = vertexIndex;
 		}
-		return std::make_pair(i, j);
+
+		return std::make_pair(curX, curY);
 	}
 };

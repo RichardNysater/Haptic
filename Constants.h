@@ -1,5 +1,7 @@
-/*
+/**
 	This header contains most of the constants used in the program.
+	@author	Richard Nysäter
+	@version 1.0 2014-05-07
 */
 #pragma once
 #include "chai3d.h"
@@ -7,6 +9,7 @@
 #include <map>
 
 using std::cerr; using std::endl;
+
 typedef std::pair<double, double> point;
 
 int resistors = 0;
@@ -14,11 +17,10 @@ const int START_VELOCITY = 5;
 const int WINDOW_SIZE_W = 800, WINDOW_SIZE_H = 600;// initial size (width/height) in pixels of the display window
 const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2; // mouse menu options (right button)
 const double MESH_SCALE_SIZE = 2.0; // size of map
-const int FORCE_AMOUNT = 0;
 
 
-/*
-The available directions for forces.
+/**
+	The available directions for forces.
 */
 enum FORCE_DIRECTION
 {
@@ -28,6 +30,9 @@ enum FORCE_DIRECTION
 	RIGHT
 };
 
+/**
+	The available directions for resistors.
+*/
 enum RESISTOR
 {
 	UP_RES,
@@ -36,6 +41,9 @@ enum RESISTOR
 	RIGHT_RES
 };
 
+/**
+	The available directions for batteries.
+*/
 enum BATTERY
 {
 	BATTERY_UP,
@@ -44,7 +52,7 @@ enum BATTERY
 	BATTERY_RIGHT
 };
 
-/*
+/**
 	Comparator required to sort cColorb inside the map
 */
 struct colorcomp {
@@ -60,14 +68,14 @@ struct colorcomp {
 	}
 };
 
-// Colours represent force directions and resistors, this map keeps track of them
+// Colours represent different objects, these maps keeps track of them
 std::map<cColorb, FORCE_DIRECTION, colorcomp> COLOUR_TO_DIR; 
 std::map<cColorb, RESISTOR, colorcomp> COLOUR_TO_RES;
 std::map<cColorb, BATTERY, colorcomp> COLOUR_TO_BAT;
 
-/*
-Initializes constants that cannot be initialized on compile time.
-Yes, this can be done in c+11 or with boost, but we can use neither.
+/**
+	Initializes constants that cannot be initialized on compile time.
+	Yes, this can be done in c+11 or with boost, but we can use neither.
 */
 void initializeConstants()
 {
@@ -102,29 +110,32 @@ void initializeConstants()
 }
 
 
-/*
-	Handles the force fields on the map.
+/**
+	Represents the fields on the map.
 */
 class Field
 {
 public:
 
-	/* 
+	/**
 		Sets the 4 points and direction of this rectangular field
 	*/
 	Field(point upper_left, point upper_right, point lower_left, point lower_right, FORCE_DIRECTION direction)
 	{
-		ul = upper_left;
-		ur = upper_right;
-		ll = lower_left;
-		lr = lower_right;
+		upperLeft = upper_left;
+		upperRight = upper_right;
+		lowerLeft = lower_left;
+		lowerRight = lower_right;
 		dir = direction;
-		fieldXSize = abs(ul.first - ur.first);
-		fieldYSize = abs(ul.second - lr.second);
+		fieldXSize = abs(upperLeft.first - upperRight.first);
+		fieldYSize = abs(upperLeft.second - lowerRight.second);
 		isBattery = false;
 		isResistor = false;
 	}
 
+	/**
+		Set a new velocity if this field is a battery or resistor
+	*/
 	void setVelocity(cGeneric3dofPointer* tool, double& velocity)
 	{
 		if (isBattery)
@@ -141,7 +152,7 @@ public:
 		}
 	}
 	
-	/*
+	/**
 		Returns true if this field is a battery
 	*/
 	bool battery()
@@ -149,7 +160,7 @@ public:
 		return isBattery;
 	}
 
-	/*
+	/**
 		Sets this field to be a battery
 	*/
 	void setBattery(bool i)
@@ -157,7 +168,7 @@ public:
 		isBattery = i;
 	}
 
-	/*
+	/**
 		Returns true if this field is a resistor
 	*/
 	bool resistor()
@@ -165,23 +176,24 @@ public:
 		return isResistor;
 	}
 
-	/*
+	/**
 		Sets this field to be a resistor
 	*/
 	void setResistor(bool i)
 	{
 		isResistor = i;
 	}
-	/*
+
+	/**
 		Checks if a tool is inside of this field
 	*/
 	bool isInside(cGeneric3dofPointer * tool) const
 	{
 		cVector3d pos = tool->getProxyGlobalPos();
-		return (pos.x >= ul.first && pos.x <= ur.first && pos.y >= ul.second && pos.y <= ll.second);
+		return (pos.x >= upperLeft.first && pos.x <= upperRight.first && pos.y >= upperLeft.second && pos.y <= lowerLeft.second);
 	}
 
-	/*
+	/**
 		Returns this field's direction
 	*/
 	FORCE_DIRECTION direction()
@@ -194,28 +206,30 @@ public:
 
 
 private:
-	std::pair<double, double> ul, ur, ll, lr;
+	std::pair<double, double> upperLeft, upperRight, lowerLeft, lowerRight;
 	FORCE_DIRECTION dir;
 	bool isBattery, isResistor;
 	double fieldXSize, fieldYSize;
-	/*
-	Returns how far the tool is from the end of the field
+
+	/**
+		Returns, in percent from 0 to 1, how close the tool is the start of the field, according to
+		the circuit's current. 
 	*/
 	double distanceFromStart(cGeneric3dofPointer* tool)
 	{
 		switch (dir)
 		{
 		case UP:
-			return 1-(std::abs(tool->getProxyGlobalPos().x - ul.first)) / fieldXSize;
+			return 1-(std::abs(tool->getProxyGlobalPos().x - upperLeft.first)) / fieldXSize;
 			break;
 		case DOWN:
-			return (std::abs(tool->getProxyGlobalPos().x - ll.first)) / fieldXSize;
+			return (std::abs(tool->getProxyGlobalPos().x - lowerLeft.first)) / fieldXSize;
 			break;
 		case LEFT:
-			return 1-(std::abs(tool->getProxyGlobalPos().y - ul.second)) / fieldYSize;
+			return 1-(std::abs(tool->getProxyGlobalPos().y - upperLeft.second)) / fieldYSize;
 			break;
 		case RIGHT:
-			return 1-(std::abs(tool->getProxyGlobalPos().y - ll.second)) / fieldYSize;
+			return 1-(std::abs(tool->getProxyGlobalPos().y - lowerLeft.second)) / fieldYSize;
 			break;
 		default:
 			throw std::invalid_argument("Field does not have correct values");
@@ -225,68 +239,69 @@ private:
 	}
 };
 
-/*
+/**
 	Prints a field
 */
 std::ostream& operator<<(std::ostream& os, const Field& f)
 {
 	os << "Printing field: " << std::endl;
-	os << "Upper left: " << f.ul.first << " " << f.ul.second << std::endl;
-	os << "Upper right: " << f.ur.first << " " << f.ur.second << std::endl;
-	os << "Lower left: " << f.ll.first << " " << f.ll.second << std::endl;
-	os << "Lower right: " << f.lr.first << " " << f.lr.second << std::endl;
+	os << "Upper left: " << f.upperLeft.first << " " << f.upperLeft.second << std::endl;
+	os << "Upper right: " << f.upperRight.first << " " << f.upperRight.second << std::endl;
+	os << "Lower left: " << f.lowerLeft.first << " " << f.lowerLeft.second << std::endl;
+	os << "Lower right: " << f.lowerRight.first << " " << f.lowerRight.second << std::endl;
 	return os;
 }
 
-/*
-	The pixelarea represents one of the fields in the loaded bitmap.
-	This area can be converted into a field.
+/**
+	The pixelarea represents one of the areas in the loaded bitmap.
+	This class is used to convert an area on the bitmap into a field in the program.
 */
 class PixelArea
 {
 public:
 
-	/*
+	/**
 		Sets the 4 points of this rectangular area
 	*/
 	PixelArea(std::pair<int, int> upper_left, std::pair<int, int> upper_right, std::pair<int, int> lower_left, std::pair<int, int> lower_right)
 	{
-		ul = upper_left;
-		ur = upper_right;
-		ll = lower_left;
-		lr = lower_right;
+		upperLeft = upper_left;
+		upperRight = upper_right;
+		lowerLeft = lower_left;
+		lowerRight = lower_right;
 	}
 
-	/*
+	/**
 		Checks if a coordinate is inside the area
 	*/
 	bool isInside(int x, int y)
 	{
-		return(x >= ul.first && x <= ur.first && y >= ul.second && y <= lr.second);
+		return(x >= upperLeft.first && x <= upperRight.first && y >= upperLeft.second && y <= lowerRight.second);
 	}
 
-	/*
+	/**
 		Convert this area into a field with a direction.
 	*/
-	Field create_field(int xSize, int ySize, double size, double offsetX, double offsetY,double scaleFactor, FORCE_DIRECTION dir)
+	Field createField(int xSize, int ySize, double size, double offsetX, double offsetY,double scaleFactor, FORCE_DIRECTION dir)
 	{
 		std::pair<double, double> upper_left, upper_right, lower_left, lower_right;
-		upper_left = make_field_pair(ul, size, offsetX, offsetY,scaleFactor);
-		upper_right = make_field_pair(ur, size, offsetX, offsetY, scaleFactor);
-		lower_left = make_field_pair(ll, size, offsetX, offsetY, scaleFactor);
-		lower_right = make_field_pair(lr, size, offsetX, offsetY, scaleFactor);
+		upper_left = makeFieldPair(upperLeft, size, offsetX, offsetY,scaleFactor);
+		upper_right = makeFieldPair(upperRight, size, offsetX, offsetY, scaleFactor);
+		lower_left = makeFieldPair(lowerLeft, size, offsetX, offsetY, scaleFactor);
+		lower_right = makeFieldPair(lowerRight, size, offsetX, offsetY, scaleFactor);
 		return Field(upper_left, upper_right, lower_left, lower_right, dir);
 	}
 
 	
 private:
+	std::pair<int, int> upperLeft, upperRight, lowerLeft, lowerRight;
 
-	/*
-		Scale a pixel coordinate into a real-world coordinate
+	/**
+		Scale a pixel coordinate into a real-world coordinates
 	*/
-	std::pair<double, double> make_field_pair(std::pair<int, int>& in, double size, double offsetX, double offsetY, double scaleFactor)
+	std::pair<double, double> makeFieldPair(std::pair<int, int>& in, double size, double offsetX, double offsetY, double scaleFactor)
 	{
 		return std::make_pair(scaleFactor*(size*(double(in.first)) - offsetX), scaleFactor*((size*double(in.second)) - offsetY));
 	}
-	std::pair<int, int> ul, ur, ll, lr;
+	
 };

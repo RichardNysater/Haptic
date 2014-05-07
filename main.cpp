@@ -1,13 +1,12 @@
-//===========================================================================
-/*
-This file is part of a haptics course project
-and is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License("GPL") version 2
-as published by the Free Software Foundation.
-
-\author    Richard Nysater
+/**
+	This is the main file for a haptics course project
+	and is free software; you can redistribute it (and the rest of the files) and/or modify
+	it under the terms of the GNU General Public License("GPL") version 2
+	as published by the Free Software Foundation.
+	
+	@author	Richard Nysater
+	@version 1.0 2014-05-07
 */
-//===========================================================================
 
 #include <assert.h>
 #include <cmath>
@@ -21,35 +20,27 @@ as published by the Free Software Foundation.
 using std::vector; using std::pair; using std::make_pair;
 using std::cout; using std::endl; using std::cerr;
 
-//---------------------------------------------------------------------------
-// DECLARED VARIABLES
-//---------------------------------------------------------------------------
-double velocity = 3;
+// Variables
 vector<Field> fields; // Vector with all the force fields
 LoadMap loadMap;
 long long curFPS = 0, curHz = 0;
-double FPS = 0, hapticHz = 0;
+double FPS = 0, hapticHz = 0, velocity = 0;
 bool worldTransparent = false, roofTransparent = true;
-int inversion = 1;// -1 if inverted
 
-// Pre-existing variables
-cLabel* FPSLabel, *HapticHzLabel; // FPS tracker
 
-cWorld* world; // a world that contains all objects of the virtual environment
-cCamera* camera; // a camera that renders the world in a window display
-cMesh* walls, * roof, *switchWalls; // a mesh object used to create the height map
-cLight *light; // a light source to illuminate the objects in the virtual scene
-int displayW = 0, displayH = 0; // width and height of the current window display
-cHapticDeviceHandler* handler; // a haptic device handler
-cGeneric3dofPointer* tool; // a 3D cursor which represents the haptic device 
-double proxyRadius;// radius of the tool proxy
-bool programRunning = false; // status of the main simulation haptics loop
-double cameraAngleH, cameraAngleV, cameraDistance; // camera position and orientation is spherical coordinates
+int displayW = 0, displayH = 0;
+bool programRunning = false, programFinished = false, flagCameraInMotion = false;
+double cameraAngleH, cameraAngleV, cameraDistance, proxyRadius;
+int mouseX, mouseY, mouseButton;
+cLabel* FPSLabel, *HapticHzLabel; // FPS trackers
+cBitmap* circuit;
+cWorld* world;
+cCamera* camera;
+cMesh* walls, * roof, *switchWalls;
+cLight *light;
+cHapticDeviceHandler* handler; 
+cGeneric3dofPointer* tool; 
 cVector3d cameraPosition;
-bool flagCameraInMotion;
-int mouseX, mouseY, mouseButton; // mouse position and button status
-
-bool programFinished = false; // has exited haptics simulation thread
 
 // DECLARED FUNCTIONS
 void updateCameraPosition(); // update camera settings
@@ -64,72 +55,63 @@ void glut_start(int argc, char** argv); // Start rendering
 const double initializeTools(); // Initialize the tool and haptic devices
 void loadWorld(const double); // Load the world
 
-/*
+/**
 	Initialize the tool and other haptic devices.
 */
 const double initializeTools()
 {
-	handler = new cHapticDeviceHandler(); // create a haptic device handler
-
-	cGenericHapticDevice* hapticDevice; // get access to the first available haptic device
+	handler = new cHapticDeviceHandler();
+	cGenericHapticDevice* hapticDevice;
 	handler->getDevice(hapticDevice, 0);
 
-	cHapticDeviceInfo info; // retrieve information about the current haptic device
+	cHapticDeviceInfo info;
 	if (hapticDevice)
 	{
 		info = hapticDevice->getSpecifications();
 	}
-	tool = new cGeneric3dofPointer(world); // create a 3D tool and add it to the world
-	camera->addChild(tool);// attach tool to camera
+	tool = new cGeneric3dofPointer(world);
+	camera->addChild(tool);
 
-	// position tool workspace in front of camera (x-axis of camera reference pointing towards the viewer)
 	//tool->setPos(-cameraDistance, 0.0, 0.0);
 	
-	tool->setHapticDevice(hapticDevice); // connect the haptic device to the tool
+	tool->setHapticDevice(hapticDevice);
 	
-	tool->start(); 	// initialize tool by connecting to haptic device
+	tool->start();
 	tool->setPos(-3.0, 0, 0.01); // Play around with this value
 	tool->setWorkspaceRadius(1.0); // map the physical workspace of the haptic device to a larger virtual workspace.
-	tool->setRadius(0.03); // define a radius for the tool (graphical display)
-	tool->m_deviceSphere->setShowEnabled(false); // hide the device sphere. only show proxy.
-	proxyRadius = 0.03; 	// set the physical readius of the proxy.
+	tool->setRadius(0.03);
+	tool->m_deviceSphere->setShowEnabled(false);
+	proxyRadius = 0.03;
 	tool->m_proxyPointForceModel->setProxyRadius(proxyRadius);
 	tool->m_proxyPointForceModel->m_collisionSettings.m_checkBothSidesOfTriangles = true;
 	
 	tool->getProxy()->setProxyGlobalPosition(cVector3d(-0.878378, 0.621621, 0.05));
-	// read the scale factor between the physical workspace of the haptic
-	// device and the virtual workspace defined for the tool
 	const double workspaceScaleFactor = tool->getWorkspaceScaleFactor();
 
-	// define a maximum stiffness that can be handled by the current
-	// haptic device. The value is scaled to take into account the
-	// workspace scale factor
 	const double stiffnessMax = info.m_maxForceStiffness / workspaceScaleFactor;
 	return stiffnessMax;
 }
 
-/*
+/**
 	Initialize the camera and light.
 */
 void initializeCamera()
 {
-	camera = new cCamera(world); // create a camera and insert it into the virtual world
+	camera = new cCamera(world);
 	world->addChild(camera);
 
 	cameraAngleH = 0;
 	cameraAngleV = 90;
 	cameraDistance = 1.8 * MESH_SCALE_SIZE;
-	updateCameraPosition(); // define a default position of the camera (described in spherical coordinates)
+	updateCameraPosition();
 
-	// set the near and far clipping planes of the camera
-	// anything in front/behind these clipping planes will not be rendered
-	camera->setClippingPlanes(0.01, 10.0);
+	camera->setClippingPlanes(0.01, 10.0); // Min and max distance from camera
 
-	light = new cLight(world); // create a light source and attach it to the camera
-	camera->addChild(light);                   // attach light to camera
-	light->setEnabled(true);                   // enable light source
-	light->setPos(cVector3d(0.0, 0.3, 0.3));  // position the light source
-	light->setDir(cVector3d(-1.0, -0.1, -0.1));  // define the direction of the light beam
+	light = new cLight(world);
+	camera->addChild(light);
+	light->setEnabled(true);
+	light->setPos(cVector3d(0.0, 0.3, 0.3));
+	light->setDir(cVector3d(-1.0, -0.1, -0.1));
 	light->m_ambient.set(0.5, 0.5, 0.5);
 	light->m_diffuse.set(0.8, 0.8, 0.8);
 	light->m_specular.set(1.0, 1.0, 1.0);
@@ -143,12 +125,12 @@ void initializeCamera()
 
 }
 
-/*
-Loads the world. This means the walls, invisible roof and forces.
+/**
+	Loads the world. This means the walls, invisible roof and forces.
 */
 void loadWorld(const double stiffnessMax)
 {
-	walls = new cMesh(world); // create new meshes for the solid world and the forces
+	walls = new cMesh(world);
 	roof = new cMesh(world);
 	switchWalls = new cMesh(world);
 
@@ -172,59 +154,48 @@ void loadWorld(const double stiffnessMax)
 		close();
 	}
 	
-	walls->setTransparencyLevel(100, true, true); // walls should be visible
-	switchWalls->setTransparencyLevel(100, true, true); // switchwalls should be visible
+	walls->setTransparencyLevel(0, true, true);
+	switchWalls->setTransparencyLevel(100, true, true);
 	walls->setStiffness(0.5 * stiffnessMax, true);
 	roof->setStiffness(0.5 * stiffnessMax, true);
 	switchWalls->setStiffness(0.5 * stiffnessMax, true);
 }
 
-/*
+/**
 	Handles the actions of pressing buttons on the haptic device
 */
-int checkButtons(int state, cVector3d toolLocalPos, cVector3d prevToolLocalPos)
+void checkButtons()
 {
-	const int STATE_IDLE = 1;
-	const int STATE_MOVE_CAMERA = 2;
-	const int STATE_NOHAPTIC = 3;
-
 	bool userSwitch = tool->getUserSwitch(0);
-	bool hapticSwitch = tool->getUserSwitch(1);
-
-
-	if (hapticSwitch) // Disable haptics while this button is held
+	if (userSwitch) // Disable collision while the button is held
 	{
-		walls->setHapticEnabled(false, true);
-		roof->setHapticEnabled(false, true);
+		
+		if (walls->getCollisionDetector() != NULL)
+		{
+			cerr << "Collision detection off" << endl;
+			walls->setCollisionDetector(NULL);
+		}
+
+		if (switchWalls->getCollisionDetector() != NULL)
+			switchWalls->setCollisionDetector(NULL);
+
+		if (roof->getCollisionDetector() != NULL)
+			roof->setCollisionDetector(NULL);
 	}
 	else
 	{
-		walls->setHapticEnabled(true, true);
-		roof->setHapticEnabled(true, true);
-	}
+		
+		if (walls->getCollisionDetector() == NULL)
+		{
+			cerr << "Collision detection on" << endl;
+			walls->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
+		}
+		if (switchWalls->getCollisionDetector() == NULL)
+			switchWalls->createAABBCollisionDetector(1.01*proxyRadius, true, false);
 
-	if ((state == STATE_MOVE_CAMERA) && (!userSwitch)) // Stop moving camera
-	{
-		state = STATE_IDLE;
-		walls->setHapticEnabled(true, true);
-		roof->setHapticEnabled(true, true);
+		if (roof->getCollisionDetector() == NULL)
+			roof->createAABBCollisionDetector(1.01*proxyRadius, true, false);
 	}
-	else if ((state == STATE_IDLE) && (userSwitch)) // Start moving camera
-	{
-		state = STATE_MOVE_CAMERA;
-		walls->setHapticEnabled(false, true);
-		roof->setHapticEnabled(false, true);
-	}
-	else if (state == STATE_MOVE_CAMERA) // Keep moving camera
-	{
-		cVector3d offset = toolLocalPos - prevToolLocalPos; // compute tool offset
-		cameraDistance = cameraDistance - 2 * offset.x; // apply camera motion
-		cameraAngleH = cameraAngleH - 40 * offset.y;
-		cameraAngleV = cameraAngleV - 40 * offset.z;
-
-		updateCameraPosition();
-	}
-	return state;
 }
 
 /*
@@ -236,26 +207,19 @@ void updateHaptics(void)
 	pclock.setTimeoutPeriodSeconds(1.0);
 	pclock.start(true);
 
-	cPrecisionClock clock;
-	clock.start(true);
-
-	int counter = 0;
-
-	int state = 1;
-
-	cVector3d toolGlobalPos, toolLocalPos, prevToolGlobalPos, prevToolLocalPos; // Tool positions
+	cVector3d toolGlobalPos, toolLocalPos, prevToolGlobalPos, prevToolLocalPos;
 
 	while (programRunning)
 	{
-		world->computeGlobalPositions(true); // compute global reference frames for each object
+		world->computeGlobalPositions(true);
 
-		tool->updatePose(); // update position, orientation of tool and compute forces
+		tool->updatePose();
 		tool->computeInteractionForces();
 
-		toolGlobalPos = tool->getDeviceGlobalPos(); // update tool position
+		toolGlobalPos = tool->getDeviceGlobalPos();
 		toolLocalPos = tool->getDeviceLocalPos();
 
-		state = checkButtons(state,toolLocalPos,prevToolLocalPos);
+		checkButtons();
 
 		prevToolLocalPos = toolLocalPos;
 		prevToolGlobalPos = toolGlobalPos;
@@ -303,41 +267,55 @@ void updateHaptics(void)
 	programFinished = true;
 }
 
-/*
-When a button is pressed, this function is called.
-Inside this function we therefore handle all key-based events.
+/**
+	This function is called when a key is pressed
 */
 void keySelect(unsigned char key, int x, int y)
 {
-	if ((key == 27) || (key == 'x')) // Escape key
+	if ((key == 27) || (key == 'x')) // Escape
 	{
 		close();
 		exit(EXIT_SUCCESS);
 	}
 	else if (key == '1')
 	{
-		cerr << "Switching texture" << endl;
-		bool useTexture = walls->getUseTexture();
-		walls->setUseTexture(!useTexture);
+		bool useTexture = !walls->getUseTexture();
+		if (useTexture)
+			cerr << "Wall textures activated" << endl;
+		else
+			cerr << "Wall textures deactivated" << endl;
+		walls->setUseTexture(useTexture);
 	}
 	else if (key == '2')
 	{
-		cerr << "Switching wireframe" << endl;
-		bool useWireMode = walls->getWireMode();
-		walls->setWireMode(!useWireMode);
+		bool useWireMode = !walls->getWireMode();
+		if (useWireMode)
+			cerr << "Wall wiremode activated" << endl;
+		else
+			cerr << "Wall wiremode deactivated" << endl;
+		walls->setWireMode(useWireMode);
 	}
 	else if (key == '3')
 	{
-		cerr << "Switching switchwalls" << endl;
-		switchWalls->setShowEnabled(!switchWalls->getShowEnabled());
+		bool switchWallsOn = !switchWalls->getShowEnabled();
+		if (switchWallsOn)
+			cerr << "Switch walls activated" << endl;
+		else
+			cerr << "Switch walls deactivated" << endl;
+		switchWalls->setShowEnabled(switchWallsOn);
 	}
 	else if (key == '4')
 	{
-		cerr << "Switching collision detection" << endl;
-		if(walls->getCollisionDetector() == NULL)
+		if (walls->getCollisionDetector() == NULL)
+		{
+			cerr << "Collision detection activated" << endl;
 			walls->createAABBCollisionDetector(1.01 * proxyRadius, true, false);
+		}
 		else
+		{
+			cerr << "Collision detection deactived" << endl;
 			walls->setCollisionDetector(NULL);
+		}
 
 		if (switchWalls->getCollisionDetector() == NULL)
 			switchWalls->createAABBCollisionDetector(1.01*proxyRadius, true, false);
@@ -379,8 +357,8 @@ void keySelect(unsigned char key, int x, int y)
 	}
 }
 
-/*
-Updates the camera position
+/**
+	Updates the camera position
 */
 void updateCameraPosition()
 {
@@ -407,30 +385,25 @@ void updateCameraPosition()
 		)
 		);
 
-	cVector3d lookat = cameraPosition; // compute lookat position
-
-	cVector3d up(0.0, 0.0, 1.0); // define role orientation of camera
-
-	camera->set(pos, lookat, up); // set new position to camera
-
-	world->computeGlobalPositions(true); // recompute global positions
+	cVector3d lookAt = cameraPosition;
+	cVector3d up(0.0, 0.0, 1.0);
+	camera->set(pos, lookAt, up);
+	world->computeGlobalPositions(true);
 
 	//if (tool != NULL) // update tool position
 	//	tool->setPos(-cameraDistance, 0.0, 0.0);
 }
 
-/*
-Starts the opengl graphics
+/**
+	Starts the opengl graphics
 */
 void glut_start(int argc, char** argv)
 {
-	glutInit(&argc, argv); // initialize GLUT
+	glutInit(&argc, argv);
 
-	// retrieve the resolution of the computer display and estimate the position
-	// of the GLUT window so that it is located at the center of the screen
 	int screenW = glutGet(GLUT_SCREEN_WIDTH);
 	int screenH = glutGet(GLUT_SCREEN_HEIGHT);
-	int windowPosX = (screenW - WINDOW_SIZE_W) / 2;
+	int windowPosX = (screenW - WINDOW_SIZE_W) / 2; // Centered
 	int windowPosY = (screenH - WINDOW_SIZE_H) / 2;
 
 	// initialize the OpenGL GLUT window
@@ -445,7 +418,7 @@ void glut_start(int argc, char** argv)
 	glutReshapeFunc(resizeWindow);
 	glutSetWindowTitle("IDCL - Haptics project");
 
-	// START SIMULATION
+	// Start simulation
 	programRunning = true;
 
 	cThread* hapticsThread = new cThread(); // create a thread which starts the main haptics rendering loop
@@ -455,20 +428,15 @@ void glut_start(int argc, char** argv)
 	close();
 }
 
-/*
-Updates the graphics displayed
+/**
+	Updates the graphics displayed
 */
 void updateGraphics(void)
 {
-	char buffer[128];
-	sprintf(buffer, "FPS: %.0lf ", FPS); // Print the FPS (should be 30+)
-	FPSLabel->m_string = buffer;
-	sprintf(buffer, "Haptic Hz: %.0lf ", hapticHz); // Print the haptic update rate (needs to be 500+)
-	HapticHzLabel->m_string = buffer;
-	// update walls normals
+	FPSLabel->m_string = "FPS: " + std::to_string((int) FPS); // Print the FPS (should be 30+)
+	HapticHzLabel->m_string = "Haptic Hz: " + std::to_string((int) hapticHz); // Print the haptic update rate (needs to be 500+)
+
 	walls->computeAllNormals(true);
-	
-	// render world
 	camera->renderView(displayW, displayH);
 
 	glutSwapBuffers();
@@ -480,8 +448,8 @@ void updateGraphics(void)
 	curFPS++;
 }
 
-/*
-Update the size of the viewport
+/**
+	This function is called when the window is resized by the user
 */
 void resizeWindow(int w, int h)
 {
@@ -490,8 +458,8 @@ void resizeWindow(int w, int h)
 	glViewport(0, 0, displayW, displayH);
 }
 
-/*
-When the mouse button is pressed, the world can be moved
+/**
+	When the mouse button is pressed, the world can be moved
 */
 void mouseClick(int button, int state, int x, int y)
 {
@@ -508,8 +476,8 @@ void mouseClick(int button, int state, int x, int y)
 	}
 }
 
-/*
-When the mouse moves, the world should move with it
+/**
+	When the mouse moves, the world should move with it
 */
 void mouseMove(int x, int y)
 {
@@ -519,7 +487,6 @@ void mouseMove(int x, int y)
 		{
 			cameraDistance = cameraDistance - 0.01 * (y - mouseY);
 		}
-
 		else if (mouseButton == GLUT_LEFT_BUTTON)
 		{
 			cameraAngleH = cameraAngleH - (x - mouseX);
@@ -532,38 +499,37 @@ void mouseMove(int x, int y)
 	mouseY = y;
 }
 
-/*
-Close the program
+/**
+	Close the program
 */
 void close(void)
 {
 	programRunning = false;
-
-	// wait for graphics and haptics loops to terminate
 	while (!programFinished)
 	{
 		cSleepMs(100);
 	}
 	tool->stop();
-	
 }
 
-/*
-The main function initializes everything.
+/**
+	The main function initializes everything.
 */
 int main(int argc, char* argv [])
 {
 	initializeConstants();
 	loadMap.initialize(argv);
+	
 	world = new cWorld(); // create a new world.
-
-	// set the background color of the environment
-	// the color is defined by its (R,G,B) components.
 	world->setBackgroundColor(0.1, 0.1, 0.1);
 
 	initializeCamera();
+
+	loadMap.loadCircuitPicture(circuit, camera);
+
 	const double stiffnessMax = initializeTools(); // Initialize the tool and get the max stiffness
-	loadWorld(stiffnessMax); // Load the world (walls, roof and forces)
+	loadWorld(stiffnessMax); // Load the world (walls, roof, forces etc)
+
 	glut_start(argc, argv); // Start rendering with OpenGL
 	return (EXIT_SUCCESS);
 }
