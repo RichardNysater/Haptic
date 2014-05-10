@@ -13,7 +13,7 @@ using std::cerr; using std::endl;
 typedef std::pair<double, double> point;
 
 int resistors = 0;
-const int START_VELOCITY = 5;
+const double START_VELOCITY = 5;
 const int WINDOW_SIZE_W = 800, WINDOW_SIZE_H = 600;// initial size (width/height) in pixels of the display window
 const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2; // mouse menu options (right button)
 const double MESH_SCALE_SIZE = 2.0; // size of map
@@ -141,13 +141,13 @@ public:
 		if (isBattery)
 		{
 			double distance = distanceFromStart(tool);
-			velocity = distance*START_VELOCITY;
-			cerr << distance << " inside battery. Setting velocity to: " << velocity << endl;
+			velocity = min(START_VELOCITY,insideVelocity+distance*START_VELOCITY);
+			cerr << distance << " inside battery. Setting velocity to: " << velocity <<" . insideVel: "<<insideVelocity <<endl;
 		}
 		else if (isResistor)
 		{
 			double distance = distanceFromStart(tool);
-			velocity = START_VELOCITY - distance*START_VELOCITY;
+			velocity = max(0,insideVelocity - distance*(START_VELOCITY/(double)resistors));
 			cerr << distance << " inside resistor. Setting velocity to: " << velocity << endl;
 		}
 	}
@@ -185,12 +185,26 @@ public:
 	}
 
 	/**
-		Checks if a tool is inside of this field
+		Checks if a tool is inside of this field.
+		If the tool just went inside, the field's velocity is set.
 	*/
-	bool isInside(cGeneric3dofPointer * tool) const
+	bool isInside(cGeneric3dofPointer * tool, double velocity)
 	{
 		cVector3d pos = tool->getProxyGlobalPos();
-		return (pos.x >= upperLeft.first && pos.x <= upperRight.first && pos.y >= upperLeft.second && pos.y <= lowerLeft.second);
+		bool in = (pos.x >= upperLeft.first && pos.x <= upperRight.first && pos.y >= upperLeft.second && pos.y <= lowerLeft.second);
+		if (in && !inside)
+		{
+			if (distanceFromStart(tool) > 0.8) // Approaching from "wrong" side
+				if (isBattery)
+					insideVelocity = 0;
+				else
+					insideVelocity = velocity+(START_VELOCITY/(double)resistors);
+			else
+				insideVelocity = velocity;
+		}
+		inside = in;
+		
+		return inside;
 	}
 
 	/**
@@ -208,8 +222,8 @@ public:
 private:
 	std::pair<double, double> upperLeft, upperRight, lowerLeft, lowerRight;
 	FORCE_DIRECTION dir;
-	bool isBattery, isResistor;
-	double fieldXSize, fieldYSize;
+	bool isBattery, isResistor, inside;
+	double fieldXSize, fieldYSize, insideVelocity;
 
 	/**
 		Returns, in percent from 0 to 1, how close the tool is the start of the field, according to

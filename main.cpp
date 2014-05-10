@@ -227,7 +227,7 @@ void updateHaptics(void)
 		
 		for (int ind = 0; ind < fields.size(); ++ind)
 		{
-			if (fields[ind].isInside(tool))
+			if (fields[ind].isInside(tool,velocity))
 			{
 				fields[ind].setVelocity(tool, velocity);
 				//cerr << "Inside field: " << ind << " dir: " << fields[ind].direction() << endl;
@@ -463,6 +463,7 @@ void resizeWindow(int w, int h)
 */
 void mouseClick(int button, int state, int x, int y)
 {
+	/*
 	if (state == GLUT_DOWN) // mouse button down
 	{
 		flagCameraInMotion = true;
@@ -474,6 +475,7 @@ void mouseClick(int button, int state, int x, int y)
 	{
 		flagCameraInMotion = false;
 	}
+	*/
 }
 
 /**
@@ -521,7 +523,7 @@ int main(int argc, char* argv [])
 	loadMap.initialize(argv);
 	
 	world = new cWorld(); // create a new world.
-	world->setBackgroundColor(0.1, 0.1, 0.1);
+	world->setBackgroundColor(0.5, 0.5, 0.5);
 
 	initializeCamera();
 

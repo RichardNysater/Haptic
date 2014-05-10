@@ -67,7 +67,7 @@ public:
 			fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("images/circuit.bmp"));
 		}
 		if (!fileload)
-		{
+		{	
 			cerr << "Unable to load circuit. No texture found" << endl;
 			return;
 		}
@@ -83,8 +83,8 @@ public:
 		// the background of the logo look transparent.
 		
 		circuit->m_image.replace(
-			cColorb(0, 0, 0),      // original RGB color
-			cColorb(0, 0, 0, 0)    // new RGBA color
+			cColorb(255, 255, 255),      // original RGB color
+			cColorb(255, 255, 255, 0)    // new RGBA color
 			);
 
 		// enable transparency
