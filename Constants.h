@@ -6,13 +6,16 @@
 #pragma once
 #include "chai3d.h"
 #include <iostream>
+#include <sstream>
 #include <map>
 
 using std::cerr; using std::endl;
 
 typedef std::pair<double, double> point;
 
+const int MAP_CHOICE = 2;
 int resistors = 0;
+double resistorSizes = 0;
 const double START_VELOCITY = 5;
 const int WINDOW_SIZE_W = 800, WINDOW_SIZE_H = 600;// initial size (width/height) in pixels of the display window
 const int OPTION_FULLSCREEN = 1, OPTION_WINDOWDISPLAY = 2; // mouse menu options (right button)
@@ -131,6 +134,7 @@ public:
 		fieldYSize = abs(upperLeft.second - lowerRight.second);
 		isBattery = false;
 		isResistor = false;
+		
 	}
 
 	/**
@@ -142,12 +146,14 @@ public:
 		{
 			double distance = distanceFromStart(tool);
 			velocity = min(START_VELOCITY,insideVelocity+distance*START_VELOCITY);
-			cerr << distance << " inside battery. Setting velocity to: " << velocity <<" . insideVel: "<<insideVelocity <<endl;
+			
+			cerr << distance << " inside battery. Setting velocity to: " << velocity << " . insideVel: " << insideVelocity << endl;
 		}
 		else if (isResistor)
 		{
 			double distance = distanceFromStart(tool);
-			velocity = max(0,insideVelocity - distance*(START_VELOCITY/(double)resistors));
+			//velocity = max(0,insideVelocity - distance*(START_VELOCITY/(double)resistors));
+			velocity = max(0, insideVelocity - distance*(START_VELOCITY / (resistorSizes/(fieldXSize*fieldYSize))));
 			cerr << distance << " inside resistor. Setting velocity to: " << velocity << endl;
 		}
 	}
@@ -166,6 +172,7 @@ public:
 	void setBattery(bool i)
 	{
 		isBattery = i;
+		
 	}
 
 	/**
@@ -173,6 +180,7 @@ public:
 	*/
 	bool resistor()
 	{
+
 		return isResistor;
 	}
 
@@ -181,6 +189,11 @@ public:
 	*/
 	void setResistor(bool i)
 	{
+		if (!isResistor && i)
+			resistorSizes += fieldXSize*fieldYSize;
+		else if (!i && isResistor)
+			resistorSizes -= fieldXSize*fieldYSize;
+
 		isResistor = i;
 	}
 
@@ -198,7 +211,7 @@ public:
 				if (isBattery)
 					insideVelocity = 0;
 				else
-					insideVelocity = velocity+(START_VELOCITY/(double)resistors);
+					insideVelocity = velocity + (START_VELOCITY / (resistorSizes / (fieldXSize*fieldYSize)));
 			else
 				insideVelocity = velocity;
 		}

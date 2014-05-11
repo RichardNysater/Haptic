@@ -14,6 +14,7 @@
 #include <unordered_set>
 
 
+
 using std::string; using std::cerr; using std::endl; using std::pair;
 
 #define RESOURCE_PATH(p)    (char*)((resourceRoot+string(p)).c_str()) // convert to resource path
@@ -61,10 +62,33 @@ public:
 		camera->m_back_2Dscene.addChild(circuit);
 		// load a "chai3d" bitmap image file
 		bool fileload;
-		fileload = circuit->m_image.loadFromFile("circuit.bmp");
+		switch (MAP_CHOICE)
+		{
+		case 1:
+			fileload = circuit->m_image.loadFromFile("circuit.bmp");
+			break;
+		case 2:
+			fileload = circuit->m_image.loadFromFile("circuittwo.bmp");
+			break;
+		case 3:
+			fileload = circuit->m_image.loadFromFile("circuitthree.bmp");
+			break;
+		}
+		
 		if (!fileload)
 		{
-			fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("images/circuit.bmp"));
+			switch (MAP_CHOICE)
+			{
+			case 1:
+				fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("circuit.bmp"));
+				break;
+			case 2:
+				fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("circuittwo.bmp"));
+				break;
+			case 3:
+				fileload = circuit->m_image.loadFromFile(RESOURCE_PATH("circuitthree.bmp"));
+				break;
+			}
 		}
 		if (!fileload)
 		{	
@@ -258,10 +282,33 @@ private:
 	{
 		cTexture2D* newTexture = new cTexture2D();
 		world->addTexture(newTexture);
+		bool fileload;
 		#if defined(_MSVC)
-			bool fileload = newTexture->loadFromFile("map.bmp");
+		switch (MAP_CHOICE)
+		{
+		case 1:
+			fileload = newTexture->loadFromFile("map.bmp");
+			break;
+		case 2:
+			fileload = newTexture->loadFromFile("maptwo.bmp");
+			break;
+		case 3:
+			fileload = newTexture->loadFromFile("mapthree.bmp");
+			break;
+		}
 		#else
-			bool fileload = newTexture->loadFromFile(RESOURCE_PATH("images/map.bmp"));
+		switch (MAP_CHOICE)
+		{
+		case 1:
+			fileload = newTexture->loadFromFile(RESOURCE_PATH("map.bmp"));
+			break;
+		case 2:
+			fileload = newTexture->loadFromFile(RESOURCE_PATH("maptwo.bmp"));
+			break;
+		case 3:
+			fileload = newTexture->loadFromFile(RESOURCE_PATH("mapthree.bmp"));
+			break;
+		}
 		#endif
 		if (!fileload)
 		{
