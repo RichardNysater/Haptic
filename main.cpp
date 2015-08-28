@@ -1,5 +1,10 @@
 /**
-	This is the main file for a haptics course project
+ 	Disclaimer: Please note that this project used a code skeleton which is
+ 	the reason for the code's terrible refactoring.
+ 	
+ 	
+	This is the main file for a haptics course project. 
+	
 	and is free software; you can redistribute it (and the rest of the files) and/or modify
 	it under the terms of the GNU General Public License("GPL") version 2
 	as published by the Free Software Foundation.
